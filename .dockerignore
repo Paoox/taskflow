@@ -1,0 +1,23 @@
+# TF-0003-01 — Contexto de build minimo y reproducible
+venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+.idea/
+.vscode/
+
+# Secretos y config local: nunca dentro de la imagen (CLAUDE.md 25.3)
+.env
+
+# Base de datos local de desarrollo: el contenedor crea la suya en /app/data
+tareas.db
+*.db
+
+# Documentacion no necesaria en runtime
+CLAUDE.md
+.claude/
