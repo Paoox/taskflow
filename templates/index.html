@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Tareas pendientes · Taskflow{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <h1>Tareas pendientes</h1>
+    <a class="btn btn-primary" href="{{ url_for('crear_tarea_web') }}">Nueva tarea</a>
+</section>
+
+{% if tareas %}
+<ul class="task-list">
+    {% for tarea in tareas %}
+    <li class="task-card prioridad-{{ (tarea.prioridad or 'na')|lower }}">
+        <div class="task-card__main">
+            <h2 class="task-card__title">{{ tarea.titulo }}</h2>
+            {% if tarea.descripcion %}
+            <p class="task-card__desc">{{ tarea.descripcion }}</p>
+            {% endif %}
+        </div>
+        <div class="task-card__meta">
+            <span class="badge badge-estado">{{ tarea.estado }}</span>
+            <span class="badge badge-prioridad">{{ tarea.prioridad or '—' }}</span>
+            <span class="task-card__due">Límite: {{ tarea.fecha_limite or '—' }}</span>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">No hay tareas pendientes.
+    <a href="{{ url_for('crear_tarea_web') }}">Crea la primera</a>.
+</p>
+{% endif %}
+
+<section class="projects">
+    <h2>Proyectos</h2>
+    {% if proyectos %}
+    <ul class="project-list">
+        {% for proyecto in proyectos %}
+        <li class="project-chip">
+            {{ proyecto.nombre }}
+            {% if proyecto.estado %}
+            <span class="project-chip__state">{{ proyecto.estado }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Sin proyectos.</p>
+    {% endif %}
+</section>
+{% endblock %}

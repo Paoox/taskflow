@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}Nueva tarea · Taskflow{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <h1>Nueva tarea</h1>
+    <a class="btn" href="{{ url_for('index') }}">Volver</a>
+</section>
+
+<form class="form" method="POST" action="{{ url_for('crear_tarea_web') }}">
+    <div class="form-field">
+        <label for="titulo">Título</label>
+        <input type="text" id="titulo" name="titulo" required maxlength="200">
+    </div>
+
+    <div class="form-field">
+        <label for="descripcion">Descripción</label>
+        <textarea id="descripcion" name="descripcion" rows="3"></textarea>
+    </div>
+
+    <div class="form-field">
+        <label for="fecha_limite">Fecha límite</label>
+        <input type="date" id="fecha_limite" name="fecha_limite">
+    </div>
+
+    <div class="form-field">
+        <label for="prioridad">Prioridad</label>
+        <select id="prioridad" name="prioridad">
+            <option value="Alta">Alta</option>
+            <option value="Media" selected>Media</option>
+            <option value="Baja">Baja</option>
+        </select>
+    </div>
+
+    <div class="form-field">
+        <label for="proyecto_id">Proyecto</label>
+        <select id="proyecto_id" name="proyecto_id" required>
+            {% for proyecto in proyectos %}
+            <option value="{{ proyecto.id }}">{{ proyecto.nombre }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Crear tarea</button>
+        <a class="btn" href="{{ url_for('index') }}">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

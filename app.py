@@ -19,9 +19,9 @@ def index():
     proyectos = db_manager.obtener_proyectos()
     
     # Flask usa render_template para cargar el HTML y pasarle variables
-    return render_template('index.html', 
-                           tareas=tareas_pendientes, 
-                           proyectos=proyectos)
+    return render_template('index.html',
+                           tareas=[t.to_dict() for t in tareas_pendientes],
+                           proyectos=[p.to_dict() for p in proyectos])
 
 @app.route('/crear', methods=['GET', 'POST'])
 def crear_tarea_web():
@@ -54,7 +54,8 @@ def crear_tarea_web():
         return redirect(url_for('index'))
     
     # Si la solicitud es GET, simplemente mostramos el formulario
-    return render_template('formulario_tarea.html', proyectos=proyectos)
+    return render_template('formulario_tarea.html',
+                           proyectos=[p.to_dict() for p in proyectos])
 
 if __name__ == '__main__':
     # Aseguramos que la DB esté inicializada y corremos el servidor
