@@ -1,0 +1,20 @@
+# TF-0002 — Dependencias de Taskflow
+# Entorno verificado: Python 3.8.10
+#
+# Dependencia directa (import real en app.py):
+#   - Flask
+# El resto de paquetes son dependencias transitivas de Flask, fijadas
+# explicitamente para garantizar builds reproducibles.
+# Nota: importlib-metadata y zipp solo las requiere Flask en Python < 3.10.
+
+Flask==3.0.3
+
+# --- Transitivas de Flask (pinned para reproducibilidad) ---
+Werkzeug==3.0.6
+Jinja2==3.1.6
+MarkupSafe==2.1.5
+itsdangerous==2.2.0
+click==8.1.8
+blinker==1.8.2
+importlib-metadata==8.5.0
+zipp==3.20.2
