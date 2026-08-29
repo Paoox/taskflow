@@ -21,9 +21,12 @@ tareas.db
 # Documentacion no necesaria en runtime
 CLAUDE.md
 .claude/
+docs/
 
-# Pruebas y herramientas de test: no forman parte de la imagen de runtime (TF-0005)
+# Pruebas y herramientas de test: no forman parte de la imagen de runtime
+# (TF-0005; conftest.py y docs/ anadidos en TF-0012 / BL-11 ampliado)
 tests/
+conftest.py
 pytest.ini
 requirements-dev.txt
 .pytest_cache/

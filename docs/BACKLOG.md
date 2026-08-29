@@ -21,9 +21,9 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P2 | PROMOTED | TF-0010 | TF-0005 |
 | BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
 | BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
-| BL-11 | `conftest.py` (raíz) no excluido de la imagen Docker en `.dockerignore` | REFACTOR | P3 | OPEN | — | TF-0005 |
+| BL-11 | `conftest.py` (raíz) y `docs/` no excluidos de la imagen Docker en `.dockerignore` | REFACTOR | P3 | PROMOTED | TF-0012 | TF-0005 |
 | BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | OPEN | — | Análisis TF-0007 |
-| BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | OPEN | — | Estado del repo tras TF-0008 |
+| BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
 
 ---
 
@@ -96,10 +96,13 @@ mover a un script / fixture.
 `app.run(debug=True)` fijo. Debería tomar host / port / debug de variables de
 entorno para no depender de editar código.
 
-### BL-11 — `conftest.py` en la imagen Docker
+### BL-11 — `conftest.py` y `docs/` en la imagen Docker
 
-`conftest.py` (raíz) entra en la imagen vía `COPY . .`. Es inerte en runtime pero
-podría excluirse en `.dockerignore` junto con el resto de artefactos de test.
+`conftest.py` (raíz) y `docs/` entran en la imagen vía `COPY . .`. Son inertes en
+runtime pero son peso muerto. Alcance ampliado en TF-0012 para excluir ambos en
+`.dockerignore` junto con el resto de artefactos no-runtime.
+
+Promovido a **TF-0012** (de remolque del endurecimiento del contenedor).
 
 ### BL-12 — SQLite sin enforcement de claves foráneas
 
@@ -121,3 +124,10 @@ inyecte. Consecuencia: un contenedor arranca siempre en modo desarrollo respecto
 la sesión — los tokens CSRF y las sesiones no sobreviven a un reinicio ni son
 consistentes entre réplicas. Incluir también, para despliegue tras TLS, fijar
 `SESSION_COOKIE_SECURE = True` (hoy sin definir → la cookie viaja sobre HTTP).
+
+Promovido a **TF-0012**: `obtener_secret_key()` con fail-fast en producción
+(`TASKFLOW_ENV=production` sin `TASKFLOW_SECRET_KEY` → `RuntimeError`);
+`SESSION_COOKIE_SECURE` controlado por `TASKFLOW_COOKIE_SECURE`; `Dockerfile`
+neutral por defecto + contrato de despliegue documentado. Sin `docker-compose` y
+sin almacén de sesiones (la clave fija + cookie firmada de Flask basta para que la
+sesión sobreviva a un reinicio).

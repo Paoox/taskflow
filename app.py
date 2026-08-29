@@ -3,15 +3,21 @@ from flask import Flask, render_template, request, redirect, url_for, session, a
 from src.database import DBManager
 from src.modelos import Tarea, Proyecto
 from src.validaciones import validar_datos_tarea
-from src.seguridad import generar_token, token_valido, obtener_secret_key
+from src.seguridad import (
+    generar_token, token_valido, obtener_secret_key, cookie_secure_activada,
+)
 
 # Inicialización de la aplicación Flask
 app = Flask(__name__)
-# Clave de firma de sesión (TF-0008). En despliegue debe venir de
-# TASKFLOW_SECRET_KEY; el fallback efímero es solo para desarrollo.
+# Clave de firma de sesión (TF-0008 / TF-0012). En despliegue debe venir de
+# TASKFLOW_SECRET_KEY; con TASKFLOW_ENV=production su ausencia aborta el arranque.
+# Sin esa señal, fallback efímero + warning (solo desarrollo).
 app.secret_key = obtener_secret_key(app.logger)
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
+# TF-0012: cookie de sesión con atributo Secure cuando se sirve tras TLS
+# (TASKFLOW_COOKIE_SECURE=1). Por defecto False para desarrollo local sobre HTTP.
+app.config["SESSION_COOKIE_SECURE"] = cookie_secure_activada()
 # Instancia de nuestro gestor de la DB (se conecta o crea las tablas)
 db_manager = DBManager()
 

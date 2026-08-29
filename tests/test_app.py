@@ -135,3 +135,17 @@ def test_post_crear_token_valido_datos_invalidos_sigue_400(client, csrf_token):
 def test_get_index_no_exige_token(client):
     # before_request solo bloquea POST; GET sigue libre.
     assert client.get("/").status_code == 200
+
+
+# --- TF-0012: cookie de sesión / no-regresión con SECURE off --------------
+
+def test_cookie_secure_off_por_defecto_y_flujo_csrf_intacto(client, csrf_token):
+    import app as app_module
+
+    # En el entorno de test no se define TASKFLOW_COOKIE_SECURE.
+    assert app_module.app.config["SESSION_COOKIE_SECURE"] is False
+
+    # Con SECURE off el flujo CSRF sobre HTTP sigue funcionando.
+    resp = client.post("/crear", data=_datos(csrf_token))
+    assert resp.status_code == 302
+    assert _contar_tareas() == 1

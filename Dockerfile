@@ -27,6 +27,17 @@ VOLUME ["/app/data"]
 
 EXPOSE 5000
 
+# TF-0012 — Contrato de despliegue (la imagen es NEUTRAL por defecto):
+#   Desarrollo:  docker run -p 5000:5000 -v taskflow_data:/app/data taskflow
+#                -> clave de sesion efimera + warning; NO usar asi en produccion.
+#   Produccion:  docker run ... \
+#                  -e TASKFLOW_ENV=production \
+#                  -e TASKFLOW_SECRET_KEY=<clave real, p.ej. secrets.token_hex(32)> \
+#                  -e TASKFLOW_COOKIE_SECURE=1 \
+#                  -v taskflow_data:/app/data taskflow
+#                Con TASKFLOW_ENV=production, la ausencia de TASKFLOW_SECRET_KEY
+#                aborta el arranque (fail-fast).
+
 # Servidor de desarrollo de Flask. Suficiente para la etapa actual;
-# un WSGI de produccion se evaluara en un ticket posterior.
+# un WSGI de produccion se evaluara en un ticket posterior (BL-06).
 CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
