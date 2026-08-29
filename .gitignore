@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 .idea/
+
+# Base de datos local: se crea automáticamente al arrancar (TF-0003-02)
+/tareas.db
