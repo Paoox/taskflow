@@ -30,6 +30,12 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-small">Completar</button>
             </form>
+            <form method="POST" class="task-card__action"
+                  action="{{ url_for('eliminar_tarea', tarea_id=tarea.id) }}"
+                  onsubmit="return confirm('¿Eliminar esta tarea? Esta acción no se puede deshacer.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-small">Eliminar</button>
+            </form>
         </div>
     </li>
     {% endfor %}

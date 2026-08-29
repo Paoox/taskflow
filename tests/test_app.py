@@ -338,3 +338,58 @@ def test_crear_sigue_funcionando_tras_parametrizar_plantilla(client, csrf_token)
         "SELECT COUNT(*) FROM tareas WHERE titulo = 'Creada post-TF0014'").fetchone()[0]
     conn.close()
     assert n == 1
+
+
+# --- TF-0016: eliminar tarea -----------------------------------------------
+
+def test_eliminar_tarea_borra_y_redirige(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Para borrar")
+    resp = client.post(f"/tareas/{tid}/eliminar", data={"csrf_token": csrf_token})
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+    assert _tarea_row(tid) is None
+    assert _contar_tareas() == 0
+
+
+def test_eliminar_tarea_desaparece_de_la_lista(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Se borra de la lista")
+    assert b"Se borra de la lista" in client.get("/").data
+    client.post(f"/tareas/{tid}/eliminar", data={"csrf_token": csrf_token})
+    assert b"Se borra de la lista" not in client.get("/").data
+
+
+def test_eliminar_tarea_id_inexistente_404(client, csrf_token):
+    assert client.post("/tareas/999999/eliminar",
+                       data={"csrf_token": csrf_token}).status_code == 404
+
+
+def test_eliminar_tarea_id_no_numerico_404(client, csrf_token):
+    assert client.post("/tareas/abc/eliminar",
+                       data={"csrf_token": csrf_token}).status_code == 404
+
+
+def test_eliminar_tarea_get_no_permitido_405(client):
+    assert client.get("/tareas/1/eliminar").status_code == 405
+
+
+def test_eliminar_tarea_sin_csrf_403_y_no_borra(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Sin token no borra")
+    resp = client.post(f"/tareas/{tid}/eliminar", data={})
+    assert resp.status_code == 403
+    assert _tarea_row(tid) is not None
+
+
+def test_index_muestra_form_eliminar_con_confirm(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Con eliminar")
+    body = client.get("/").data
+    assert f'action="/tareas/{tid}/eliminar"'.encode() in body
+    assert b"confirm(" in body
+
+
+def test_eliminar_no_afecta_a_otras_tareas(client, csrf_token):
+    a = _crear_y_obtener_id(client, csrf_token, titulo="Borrar A")
+    _crear_y_obtener_id(client, csrf_token, titulo="Conservar B")
+    client.post(f"/tareas/{a}/eliminar", data={"csrf_token": csrf_token})
+    body = client.get("/").data
+    assert b"Conservar B" in body
+    assert b"Borrar A" not in body

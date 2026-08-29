@@ -90,6 +90,20 @@ class DBManager:
         conn.close()
         return afectadas > 0
 
+    def eliminar_tarea(self, tarea_id):
+        """Elimina una tarea por id (TF-0016).
+
+        Devuelve True si borró una fila, False si el id no existe. Borrar una
+        tarea (hijo de la FK `tareas.proyecto_id`) no afecta a `proyectos`.
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tareas WHERE id = ?", (tarea_id,))
+        conn.commit()
+        afectadas = cursor.rowcount
+        conn.close()
+        return afectadas > 0
+
     def obtener_tarea(self, tarea_id):
         """Devuelve la Tarea con ese id, o None si no existe (TF-0014).
 

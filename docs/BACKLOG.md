@@ -14,7 +14,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-01 | `/crear` sin validación de entrada (500 con `proyecto_id` inválido/ausente) | BUG/SECURITY | P1 | PROMOTED | TF-0007 | Análisis "siguiente ticket" |
 | BL-02 | `obtener_tareas()` no preserva `fecha_creacion` al leer (se regenera con `now()`) | BUG/REFACTOR | P2 | PROMOTED | TF-0009 | Análisis TF-0005 |
 | BL-03 | Formulario POST `/crear` sin protección CSRF | SECURITY | P2 | PROMOTED | TF-0008 | Análisis "siguiente ticket" |
-| BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | PROMOTED | TF-0013 (04a), TF-0014 (04b) | Discusión de tickets |
+| BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | DONE | TF-0013 (04a), TF-0014 (04b), TF-0016 (04c) | Discusión de tickets |
 | BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | OPEN | — | Análisis "siguiente ticket" |
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
 | BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | PROMOTED | TF-0011 | doc TF-0003-01 |
@@ -54,16 +54,21 @@ El modelo tiene `marcar_como_completada()` pero no hay ruta ni control en la
 interfaz; `index()` solo muestra tareas en estado "Pendiente". No hay editar,
 eliminar ni vista de detalle.
 
-Promovido en 3 slices:
+Completado en 3 slices (**BL-04 DONE**):
 
-- **04a — completar** (`TF-0013`, **hecho**): `DBManager.marcar_tarea_completada(id)`
+- **04a — completar** (`TF-0013`): `DBManager.marcar_tarea_completada(id)`
   + `POST /tareas/<id>/completar` + botón "Completar" en `index.html`.
-- **04b — editar** (`TF-0014`, **hecho**): `DBManager.obtener_tarea(id)` +
+- **04b — editar** (`TF-0014`): `DBManager.obtener_tarea(id)` +
   `actualizar_tarea(id, datos)` + `GET|POST /tareas/<id>/editar` reutilizando
   `formulario_tarea.html` parametrizada + enlace "Editar" en `index.html`. No
   toca `estado` ni `fecha_creacion`.
-- **04c — eliminar** (**pendiente**, **después de BL-12**): `eliminar_tarea(id)`
-  + `POST /tareas/<id>/eliminar`.
+- **04c — eliminar** (`TF-0016`): `DBManager.eliminar_tarea(id)` +
+  `POST /tareas/<id>/eliminar` + botón "Eliminar" (con `confirm()` de JS) en
+  `index.html`. Borrado permanente; sin papelera/undo. Borrar una tarea (hijo de
+  la FK) no afecta a `proyectos`.
+
+Nota: BL-12 no era un bloqueo real de 04c — borrar una *tarea* no toca la FK
+`tareas.proyecto_id`; solo lo sería borrar *proyectos* (no hay tal función).
 
 ### BL-05 — README de arranque
 

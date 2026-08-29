@@ -92,6 +92,14 @@ def completar_tarea(tarea_id):
     return redirect(url_for('index'))
 
 
+@app.route('/tareas/<int:tarea_id>/eliminar', methods=['POST'])
+def eliminar_tarea(tarea_id):
+    """Elimina una tarea (TF-0016). Borrado permanente. CSRF cubierto por before_request."""
+    if not db_manager.eliminar_tarea(tarea_id):
+        abort(404)
+    return redirect(url_for('index'))
+
+
 @app.route('/tareas/<int:tarea_id>/editar', methods=['GET', 'POST'])
 def editar_tarea(tarea_id):
     """Edita los campos de una tarea (TF-0014). CSRF cubierto por before_request.

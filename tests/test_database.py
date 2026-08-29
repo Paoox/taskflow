@@ -276,3 +276,46 @@ class TestForeignKeys:
     def test_seed_id_0_se_crea_con_fk_activa(self, db):
         proyectos = db.obtener_proyectos()
         assert any(p.id == 0 for p in proyectos)
+
+
+class TestEliminarTarea:
+    """TF-0016 — DBManager.eliminar_tarea(id) (borrado permanente)."""
+
+    def test_borra_la_tarea_y_devuelve_true(self, db):
+        creada = db.crear_tarea(_tarea("A borrar", "2026-01-01"))
+        assert db.eliminar_tarea(creada.id) is True
+        assert db.obtener_tarea(creada.id) is None
+        assert db.obtener_tareas() == []
+
+    def test_id_inexistente_devuelve_false_y_no_altera_nada(self, db):
+        db.crear_tarea(_tarea("Intacta", "2026-01-01"))
+        assert db.eliminar_tarea(999999) is False
+        assert len(db.obtener_tareas()) == 1
+
+    def test_solo_borra_la_indicada(self, db):
+        a = db.crear_tarea(_tarea("A", "2026-01-01"))
+        db.crear_tarea(_tarea("B", "2026-01-02"))
+        db.eliminar_tarea(a.id)
+        assert [t._titulo for t in db.obtener_tareas()] == ["B"]
+
+    def test_borra_tarea_completada(self, db):
+        creada = db.crear_tarea(_tarea("Hecha", "2026-01-01", estado="Completada"))
+        assert db.eliminar_tarea(creada.id) is True
+        assert db.obtener_tarea(creada.id) is None
+
+    def test_borra_tarea_con_proyecto_id_null(self, db):
+        conn = database.get_connection()
+        conn.execute("INSERT INTO tareas(titulo, proyecto_id) VALUES ('sp', NULL)")
+        conn.commit()
+        tid = conn.execute(
+            "SELECT id FROM tareas ORDER BY id DESC LIMIT 1").fetchone()[0]
+        conn.close()
+        assert db.eliminar_tarea(tid) is True
+
+    def test_borrar_tarea_no_afecta_al_proyecto_ni_a_la_integridad(self, db):
+        creada = db.crear_tarea(_tarea("Ref a 0", "2026-01-01", proyecto_id=0))
+        db.eliminar_tarea(creada.id)
+        assert any(p.id == 0 for p in db.obtener_proyectos())
+        conn = database.get_connection()
+        assert list(conn.execute("PRAGMA foreign_key_check")) == []
+        conn.close()
