@@ -5,9 +5,13 @@ TF-0007 — validación server-side de POST /crear.
 TF-0008 — protección CSRF de las peticiones POST.
 TF-0012 — cookie de sesión.
 TF-0013 — completar tarea desde la UI.
+TF-0017 — higiene del bloque __main__ (arranque local por entorno).
 """
+import runpy
+
 import pytest
 
+import app as app_module
 from src import database
 
 
@@ -393,3 +397,49 @@ def test_eliminar_no_afecta_a_otras_tareas(client, csrf_token):
     body = client.get("/").data
     assert b"Conservar B" in body
     assert b"Borrar A" not in body
+
+
+# --- TF-0017: higiene del bloque __main__ (BL-10) -------------------------
+
+class TestFlagEntorno:
+    """TF-0017 — `_flag_entorno`: activación solo con valor explícito."""
+
+    @pytest.mark.parametrize("valor", ["1", "true", "TRUE", "yes", "on", " on "])
+    def test_valores_de_activacion_explicitos(self, valor, monkeypatch):
+        monkeypatch.setenv("TASKFLOW_DEBUG", valor)
+        assert app_module._flag_entorno("TASKFLOW_DEBUG") is True
+
+    @pytest.mark.parametrize("valor", ["", "0", "false", "no", "off", "x"])
+    def test_valor_falso_o_vacio_no_activa(self, valor, monkeypatch):
+        monkeypatch.setenv("TASKFLOW_DEBUG", valor)
+        assert app_module._flag_entorno("TASKFLOW_DEBUG") is False
+
+    def test_variable_ausente_es_false(self, monkeypatch):
+        monkeypatch.delenv("TASKFLOW_DEBUG", raising=False)
+        assert app_module._flag_entorno("TASKFLOW_DEBUG") is False
+
+
+class TestArranqueLocal:
+    """TF-0017 — el bloque __main__ toma host/port/debug del entorno."""
+
+    def test_app_no_esta_en_modo_debug_por_defecto(self):
+        assert app_module.app.debug is False
+
+    def test_main_pasa_host_port_debug_desde_entorno(self, monkeypatch):
+        capturado = {}
+        monkeypatch.setattr("flask.Flask.run",
+                            lambda self, **kw: capturado.update(kw))
+        monkeypatch.setenv("TASKFLOW_HOST", "0.0.0.0")
+        monkeypatch.setenv("TASKFLOW_PORT", "8080")
+        monkeypatch.setenv("TASKFLOW_DEBUG", "1")
+        runpy.run_module("app", run_name="__main__")
+        assert capturado == {"host": "0.0.0.0", "port": 8080, "debug": True}
+
+    def test_main_usa_defaults_seguros_sin_entorno(self, monkeypatch):
+        capturado = {}
+        monkeypatch.setattr("flask.Flask.run",
+                            lambda self, **kw: capturado.update(kw))
+        for var in ("TASKFLOW_HOST", "TASKFLOW_PORT", "TASKFLOW_DEBUG"):
+            monkeypatch.delenv(var, raising=False)
+        runpy.run_module("app", run_name="__main__")
+        assert capturado == {"host": "127.0.0.1", "port": 5000, "debug": False}

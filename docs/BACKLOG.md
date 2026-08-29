@@ -19,8 +19,8 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
 | BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | PROMOTED | TF-0011 | doc TF-0003-01 |
 | BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P2 | PROMOTED | TF-0010 | TF-0005 |
-| BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
-| BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
+| BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | PROMOTED | TF-0017 | Lectura de código en TF-0005 |
+| BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | PROMOTED | TF-0017 | Lectura de código |
 | BL-11 | `conftest.py` (raíz) y `docs/` no excluidos de la imagen Docker en `.dockerignore` | REFACTOR | P3 | PROMOTED | TF-0012 | TF-0005 |
 | BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | PROMOTED | TF-0015 | Análisis TF-0007 |
 | BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
@@ -107,10 +107,21 @@ El bloque de demo borra `tareas.db` con `os.remove` antes de recrear tablas.
 Ejecutar el módulo por error implica pérdida de datos. Candidato a eliminar o
 mover a un script / fixture.
 
+Promovido a **TF-0017**: se elimina el bloque `__main__` completo. Sin sustituto
+(la init de la base ya ocurre en `DBManager.__init__ → crear_tablas()`; no se
+añade `scripts/` ni seed). Regresión: `python -m src.database` sobre una DB
+poblada ya no la borra ni la muta (test en `tests/test_database.py`).
+
 ### BL-10 — Config de arranque en `app.py`
 
 `app.run(debug=True)` fijo. Debería tomar host / port / debug de variables de
 entorno para no depender de editar código.
+
+Promovido a **TF-0017**: el bloque `__main__` toma `host` / `port` / `debug` de
+`TASKFLOW_HOST` / `TASKFLOW_PORT` / `TASKFLOW_DEBUG` con defaults seguros
+(`127.0.0.1:5000`, debugger desactivado salvo valor de activación explícito).
+Docker no se ve afectado (usa `flask run`). Variables documentadas en
+`.env.example`.
 
 ### BL-11 — `conftest.py` y `docs/` en la imagen Docker
 

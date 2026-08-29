@@ -2,13 +2,21 @@
 
 TF-0005 — CRUD básico.  TF-0009 — fecha_creacion.  TF-0013/0014 — completar/editar.
 TF-0015 — enforcement de claves foráneas (PRAGMA foreign_keys = ON).
+TF-0017 — el módulo ya no trae un bloque __main__ destructivo (BL-09).
 """
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import sqlite3
 
 import pytest
 
 from src import database
 from src.modelos import Proyecto, Tarea
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _tarea(titulo, fecha_limite, estado="Pendiente", prioridad="Normal", proyecto_id=0):
@@ -319,3 +327,34 @@ class TestEliminarTarea:
         conn = database.get_connection()
         assert list(conn.execute("PRAGMA foreign_key_check")) == []
         conn.close()
+
+
+class TestSinBloqueMainDemo:
+    """TF-0017 / BL-09 — ejecutar el módulo no debe tener efectos secundarios."""
+
+    def test_ejecutar_el_modulo_no_borra_ni_muta_la_db(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "persistente.db"
+        monkeypatch.setattr(database, "DATABASE_NAME", str(db_path))
+        mgr = database.DBManager()
+        mgr.crear_tarea(_tarea("no me borres", "2026-01-01"))
+        assert db_path.exists()
+
+        env = {**os.environ, "TASKFLOW_DB": str(db_path)}
+        res = subprocess.run(
+            [sys.executable, "-m", "src.database"],
+            cwd=str(_REPO_ROOT), env=env, capture_output=True, text=True)
+
+        assert res.returncode == 0, res.stderr
+        assert res.stdout.strip() == ""
+        assert db_path.exists(), "el módulo borró la base de datos"
+
+        conn = database.get_connection()
+        n = conn.execute("SELECT COUNT(*) FROM tareas "
+                         "WHERE titulo = 'no me borres'").fetchone()[0]
+        conn.close()
+        assert n == 1
+
+    def test_el_fuente_no_contiene_main_ni_os_remove(self):
+        fuente = (_REPO_ROOT / "src" / "database.py").read_text(encoding="utf-8")
+        assert "__main__" not in fuente
+        assert "os.remove" not in fuente

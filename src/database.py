@@ -200,28 +200,3 @@ class DBManager:
             )
             tareas.append(t)
         return tareas
-
-
-
-if __name__ == '__main__':
-    # Bloque de prueba para la clase
-    if os.path.exists(DATABASE_NAME):
-        os.remove(DATABASE_NAME)
-        print(f"Base de datos {DATABASE_NAME} eliminada.")
-
-    crear_tablas()
-    print(
-        f"Base de datos {DATABASE_NAME} y tablas inicializadas correctamente.")
-
-    # Prueba del CRUD (CREATE)
-    manager = DBManager()
-    tarea_prueba = Tarea(
-        titulo="Completar Ejercicio de CRUD",
-        fecha_limite="2025-10-30",
-        prioridad="Alta",
-        proyecto_id=0,
-        descripcion="Implementar el módulo database.py"
-    )
-
-    tarea_creada = manager.crear_tarea(tarea_prueba)
-    print(f"Tarea creada y ID asignado: {tarea_creada.id}")
