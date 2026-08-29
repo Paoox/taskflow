@@ -21,3 +21,9 @@ tareas.db
 # Documentacion no necesaria en runtime
 CLAUDE.md
 .claude/
+
+# Pruebas y herramientas de test: no forman parte de la imagen de runtime (TF-0005)
+tests/
+pytest.ini
+requirements-dev.txt
+.pytest_cache/

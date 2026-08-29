@@ -6,3 +6,6 @@ __pycache__/
 
 # Base de datos local: se crea automáticamente al arrancar (TF-0003-02)
 /tareas.db
+
+# Caché de pytest (TF-0005)
+.pytest_cache/
