@@ -999,6 +999,36 @@ No documentar como implementado algo que solamente haya sido propuesto.
 
 ---
 
+# 29.1 Documentación persistente de tickets
+
+Todo ticket debe tener un documento persistente en `docs/tickets/`, nombrado como
+el ticket:
+
+```text
+docs/tickets/TF-XXXX.md
+```
+
+Un ticket **no debe marcarse como `DONE`** hasta que su documento en
+`docs/tickets/` esté creado y actualizado.
+
+Cada documento debe registrar, como mínimo:
+
+* objetivo;
+* contexto;
+* cambios realizados;
+* archivos afectados;
+* pruebas (distinguiendo las ejecutadas de las no ejecutadas);
+* criterios de aceptación y su resultado;
+* commit asociado (SHA y mensaje) cuando exista.
+
+La documentación persistida en `docs/tickets/` es la **fuente de verdad histórica**
+del ticket. La conversación con Claude no debe considerarse el único registro.
+
+Los reportes generados durante la ejecución de un ticket (sección 32) deben poder
+trasladarse a su documento correspondiente sin perder información relevante.
+
+---
+
 # 30. Regla de mínima complejidad
 
 No implementar una solución compleja solamente porque podría ser útil en el futuro.
