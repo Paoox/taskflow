@@ -1,13 +1,34 @@
 # app.py
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session, abort
 from src.database import DBManager
 from src.modelos import Tarea, Proyecto
 from src.validaciones import validar_datos_tarea
+from src.seguridad import generar_token, token_valido, obtener_secret_key
 
 # Inicialización de la aplicación Flask
 app = Flask(__name__)
+# Clave de firma de sesión (TF-0008). En despliegue debe venir de
+# TASKFLOW_SECRET_KEY; el fallback efímero es solo para desarrollo.
+app.secret_key = obtener_secret_key(app.logger)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 # Instancia de nuestro gestor de la DB (se conecta o crea las tablas)
 db_manager = DBManager()
+
+
+@app.before_request
+def proteccion_csrf():
+    """Garantiza un token CSRF por sesión y lo exige en toda petición POST (TF-0008)."""
+    session.setdefault("csrf_token", generar_token())
+    if request.method == "POST":
+        if not token_valido(request.form.get("csrf_token", ""), session.get("csrf_token", "")):
+            abort(403)
+
+
+@app.context_processor
+def inyectar_csrf_token():
+    """Expone csrf_token a todas las plantillas."""
+    return {"csrf_token": session.get("csrf_token", "")}
 
 @app.route('/')
 def index():

@@ -13,6 +13,7 @@
 {% endif %}
 
 <form class="form" method="POST" action="{{ url_for('crear_tarea_web') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-field">
         <label for="titulo">Título</label>
         <input type="text" id="titulo" name="titulo" required maxlength="200"

@@ -13,7 +13,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 |----|--------|------|------|--------|--------|--------|
 | BL-01 | `/crear` sin validación de entrada (500 con `proyecto_id` inválido/ausente) | BUG/SECURITY | P1 | PROMOTED | TF-0007 | Análisis "siguiente ticket" |
 | BL-02 | `obtener_tareas()` no preserva `fecha_creacion` al leer (se regenera con `now()`) | BUG/REFACTOR | P2 | OPEN | — | Análisis TF-0005 |
-| BL-03 | Formulario POST `/crear` sin protección CSRF | SECURITY | P2 | OPEN | — | Análisis "siguiente ticket" |
+| BL-03 | Formulario POST `/crear` sin protección CSRF | SECURITY | P2 | PROMOTED | TF-0008 | Análisis "siguiente ticket" |
 | BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | OPEN | — | Discusión de tickets |
 | BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | OPEN | — | Análisis "siguiente ticket" |
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
