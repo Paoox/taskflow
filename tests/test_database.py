@@ -150,3 +150,57 @@ class TestMarcarTareaCompletada:
         assert db.marcar_tarea_completada(creada.id) is True
         (t,) = db.obtener_tareas(estado="Completada")
         assert t._estado == "Completada"
+
+
+def _datos_edicion(**cambios):
+    base = {"titulo": "Editado", "descripcion": "nueva desc",
+            "fecha_limite": "2026-11-11", "prioridad": "Baja", "proyecto_id": 0}
+    base.update(cambios)
+    return base
+
+
+class TestObtenerTarea:
+    """TF-0014 — DBManager.obtener_tarea(id)."""
+
+    def test_devuelve_la_tarea_con_sus_campos(self, db):
+        creada = db.crear_tarea(Tarea(
+            titulo="Buscar", fecha_limite="2026-05-05", prioridad="Alta",
+            proyecto_id=0, descripcion="d", fecha_creacion="2020-02-02 02:02:02"))
+        t = db.obtener_tarea(creada.id)
+        assert isinstance(t, Tarea)
+        assert (t._titulo, t._prioridad, t._proyecto_id, t._fecha_limite) == (
+            "Buscar", "Alta", 0, "2026-05-05")
+        # Preserva fecha_creacion y estado (TF-0009).
+        assert t._fecha_creacion == "2020-02-02 02:02:02"
+        assert t._estado == "Pendiente"
+
+    def test_id_inexistente_devuelve_none(self, db):
+        assert db.obtener_tarea(999999) is None
+
+
+class TestActualizarTarea:
+    """TF-0014 — DBManager.actualizar_tarea(id, datos)."""
+
+    def test_actualiza_los_campos_editables_y_devuelve_true(self, db):
+        creada = db.crear_tarea(_tarea("Original", "2026-01-01", prioridad="Alta"))
+        assert db.actualizar_tarea(creada.id, _datos_edicion()) is True
+        t = db.obtener_tarea(creada.id)
+        assert (t._titulo, t._descripcion, t._fecha_limite, t._prioridad,
+                t._proyecto_id) == ("Editado", "nueva desc", "2026-11-11", "Baja", 0)
+
+    def test_no_modifica_estado_ni_fecha_creacion(self, db):
+        creada = db.crear_tarea(Tarea(
+            titulo="Hecha", fecha_limite="2026-01-01", prioridad="Alta",
+            proyecto_id=0, estado="Completada",
+            fecha_creacion="2019-09-09 09:09:09"))
+        db.actualizar_tarea(creada.id, _datos_edicion(titulo="Retocada"))
+        t = db.obtener_tarea(creada.id)
+        assert t._titulo == "Retocada"
+        assert t._estado == "Completada"
+        assert t._fecha_creacion == "2019-09-09 09:09:09"
+
+    def test_id_inexistente_devuelve_false_y_no_altera_nada(self, db):
+        db.crear_tarea(_tarea("Intacta", "2026-01-01"))
+        assert db.actualizar_tarea(999999, _datos_edicion()) is False
+        (t,) = db.obtener_tareas()
+        assert t._titulo == "Intacta"

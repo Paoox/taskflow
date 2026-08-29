@@ -207,3 +207,134 @@ def test_completar_tarea_get_no_permitido_405(client):
 def test_completar_tarea_id_no_numerico_404(client, csrf_token):
     resp = client.post("/tareas/abc/completar", data={"csrf_token": csrf_token})
     assert resp.status_code == 404
+
+
+# --- TF-0014: editar tarea ---------------------------------------------
+
+def _tarea_row(tarea_id):
+    conn = database.get_connection()
+    fila = conn.execute(
+        "SELECT titulo, descripcion, fecha_limite, prioridad, proyecto_id, "
+        "estado, fecha_creacion FROM tareas WHERE id = ?", (tarea_id,)).fetchone()
+    conn.close()
+    return dict(fila) if fila else None
+
+
+EDICION = {
+    "titulo": "Título editado",
+    "descripcion": "Descripción editada",
+    "fecha_limite": "2026-12-31",
+    "prioridad": "Baja",
+    "proyecto_id": "0",
+}
+
+
+def test_get_editar_muestra_formulario_prellenado(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Para editar",
+                              descripcion="desc original", prioridad="Alta")
+    resp = client.get(f"/tareas/{tid}/editar")
+    assert resp.status_code == 200
+    assert b'value="Para editar"' in resp.data
+    assert b"desc original" in resp.data
+    assert b"Editar tarea" in resp.data
+    assert b"Guardar cambios" in resp.data
+    assert f'action="/tareas/{tid}/editar"'.encode() in resp.data
+
+
+def test_get_editar_id_inexistente_404(client):
+    assert client.get("/tareas/999999/editar").status_code == 404
+
+
+def test_get_editar_id_no_numerico_404(client):
+    assert client.get("/tareas/abc/editar").status_code == 404
+
+
+def test_post_editar_valido_actualiza_y_redirige(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Antes")
+    antes = _tarea_row(tid)
+
+    resp = client.post(f"/tareas/{tid}/editar",
+                       data={**EDICION, "csrf_token": csrf_token})
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+
+    ahora = _tarea_row(tid)
+    assert ahora["titulo"] == "Título editado"
+    assert ahora["descripcion"] == "Descripción editada"
+    assert ahora["fecha_limite"] == "2026-12-31"
+    assert ahora["prioridad"] == "Baja"
+    assert ahora["proyecto_id"] == 0
+    # estado y fecha_creacion intactos
+    assert ahora["estado"] == antes["estado"] == "Pendiente"
+    assert ahora["fecha_creacion"] == antes["fecha_creacion"]
+
+
+def test_post_editar_conserva_estado_de_tarea_completada(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Completar y editar")
+    assert client.post(f"/tareas/{tid}/completar",
+                       data={"csrf_token": csrf_token}).status_code == 302
+    assert _tarea_row(tid)["estado"] == "Completada"
+
+    resp = client.post(f"/tareas/{tid}/editar",
+                       data={**EDICION, "titulo": "Retocada", "csrf_token": csrf_token})
+    assert resp.status_code == 302
+    fila = _tarea_row(tid)
+    assert fila["titulo"] == "Retocada"
+    assert fila["estado"] == "Completada"
+
+
+def test_post_editar_datos_invalidos_400_y_sin_cambios(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="No tocar")
+    antes = _tarea_row(tid)
+
+    resp = client.post(f"/tareas/{tid}/editar",
+                       data={**EDICION, "titulo": "   ", "csrf_token": csrf_token})
+    assert resp.status_code == 400
+    assert b"Editar tarea" in resp.data
+    assert _tarea_row(tid) == antes
+
+
+def test_post_editar_proyecto_inexistente_400(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token)
+    resp = client.post(f"/tareas/{tid}/editar",
+                       data={**EDICION, "proyecto_id": "999", "csrf_token": csrf_token})
+    assert resp.status_code == 400
+    assert _tarea_row(tid)["proyecto_id"] == 0
+
+
+def test_post_editar_id_inexistente_404(client, csrf_token):
+    resp = client.post("/tareas/999999/editar",
+                       data={**EDICION, "csrf_token": csrf_token})
+    assert resp.status_code == 404
+
+
+def test_post_editar_sin_csrf_403_y_sin_cambios(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Sin token")
+    antes = _tarea_row(tid)
+    resp = client.post(f"/tareas/{tid}/editar", data=dict(EDICION))
+    assert resp.status_code == 403
+    assert _tarea_row(tid) == antes
+
+
+def test_index_muestra_enlace_editar(client, csrf_token):
+    tid = _crear_y_obtener_id(client, csrf_token, titulo="Con enlace")
+    body = client.get("/").data
+    assert f'href="/tareas/{tid}/editar"'.encode() in body
+
+
+# --- TF-0014: no-regresión del flujo de creación tras parametrizar la plantilla
+
+def test_crear_sigue_funcionando_tras_parametrizar_plantilla(client, csrf_token):
+    resp = client.get("/crear")
+    assert resp.status_code == 200
+    assert b"Nueva tarea" in resp.data
+    assert b"Crear tarea" in resp.data
+    assert b'action="/crear"' in resp.data
+
+    r2 = client.post("/crear", data=_datos(csrf_token, titulo="Creada post-TF0014"))
+    assert r2.status_code == 302
+    conn = database.get_connection()
+    n = conn.execute(
+        "SELECT COUNT(*) FROM tareas WHERE titulo = 'Creada post-TF0014'").fetchone()[0]
+    conn.close()
+    assert n == 1

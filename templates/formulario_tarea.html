@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Nueva tarea · Taskflow{% endblock %}
+{% block title %}{{ titulo_pag }} · Taskflow{% endblock %}
 
 {% block content %}
 <section class="page-head">
-    <h1>Nueva tarea</h1>
+    <h1>{{ titulo_pag }}</h1>
     <a class="btn" href="{{ url_for('index') }}">Volver</a>
 </section>
 
@@ -12,7 +12,7 @@
 <p class="form-error-summary" role="alert">Revisa los campos marcados.</p>
 {% endif %}
 
-<form class="form" method="POST" action="{{ url_for('crear_tarea_web') }}">
+<form class="form" method="POST" action="{{ accion }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-field">
         <label for="titulo">Título</label>
@@ -69,7 +69,7 @@
     </div>
 
     <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Crear tarea</button>
+        <button type="submit" class="btn btn-primary">{{ boton }}</button>
         <a class="btn" href="{{ url_for('index') }}">Cancelar</a>
     </div>
 </form>

@@ -86,6 +86,50 @@ class DBManager:
         conn.close()
         return afectadas > 0
 
+    def obtener_tarea(self, tarea_id):
+        """Devuelve la Tarea con ese id, o None si no existe (TF-0014).
+
+        Preserva fecha_creacion y estado (coherente con TF-0009).
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        fila = cursor.execute(
+            "SELECT * FROM tareas WHERE id = ?", (tarea_id,)).fetchone()
+        conn.close()
+        if fila is None:
+            return None
+        return Tarea(
+            titulo=fila['titulo'],
+            fecha_limite=fila['fecha_limite'],
+            prioridad=fila['prioridad'],
+            proyecto_id=fila['proyecto_id'],
+            descripcion=fila['descripcion'],
+            id=fila['id'],
+            estado=fila['estado'],
+            fecha_creacion=fila['fecha_creacion'],
+        )
+
+    def actualizar_tarea(self, tarea_id, datos):
+        """Actualiza los campos editables de una tarea (TF-0014).
+
+        No modifica `estado` ni `fecha_creacion`. `datos` debe venir ya saneado
+        por `validar_datos_tarea` (mismo contrato que `crear_tarea`).
+        Devuelve True si actualizó una fila, False si el id no existe.
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE tareas
+               SET titulo = ?, descripcion = ?, fecha_limite = ?,
+                   prioridad = ?, proyecto_id = ?
+             WHERE id = ?
+        """, (datos['titulo'], datos['descripcion'], datos['fecha_limite'],
+              datos['prioridad'], datos['proyecto_id'], tarea_id))
+        conn.commit()
+        afectadas = cursor.rowcount
+        conn.close()
+        return afectadas > 0
+
     def obtener_proyectos(self):
         conn = get_connection()
         cursor = conn.cursor()

@@ -56,6 +56,10 @@ def crear_tarea_web():
     """Maneja la creación de una tarea."""
 
     proyectos = [p.to_dict() for p in db_manager.obtener_proyectos()]
+    comun = dict(proyectos=proyectos,
+                 accion=url_for('crear_tarea_web'),
+                 titulo_pag='Nueva tarea',
+                 boton='Crear tarea')
 
     if request.method == 'POST':
         # 1. Validación server-side de los datos del formulario (TF-0007)
@@ -65,9 +69,9 @@ def crear_tarea_web():
         if errores:
             # Re-render del formulario con los mensajes y los valores enviados.
             return render_template('formulario_tarea.html',
-                                   proyectos=proyectos,
                                    errores=errores,
-                                   valores=request.form.to_dict()), 400
+                                   valores=request.form.to_dict(),
+                                   **comun), 400
 
         # 2. Creación del objeto de POO y guardado (CRUD Create)
         db_manager.crear_tarea(Tarea(**datos))
@@ -77,9 +81,7 @@ def crear_tarea_web():
 
     # Si la solicitud es GET, simplemente mostramos el formulario
     return render_template('formulario_tarea.html',
-                           proyectos=proyectos,
-                           errores={},
-                           valores={})
+                           errores={}, valores={}, **comun)
 
 
 @app.route('/tareas/<int:tarea_id>/completar', methods=['POST'])
@@ -88,6 +90,46 @@ def completar_tarea(tarea_id):
     if not db_manager.marcar_tarea_completada(tarea_id):
         abort(404)
     return redirect(url_for('index'))
+
+
+@app.route('/tareas/<int:tarea_id>/editar', methods=['GET', 'POST'])
+def editar_tarea(tarea_id):
+    """Edita los campos de una tarea (TF-0014). CSRF cubierto por before_request.
+
+    No modifica `estado` ni `fecha_creacion`.
+    """
+    tarea = db_manager.obtener_tarea(tarea_id)
+    if tarea is None:
+        abort(404)
+
+    proyectos = [p.to_dict() for p in db_manager.obtener_proyectos()]
+    comun = dict(proyectos=proyectos,
+                 accion=url_for('editar_tarea', tarea_id=tarea_id),
+                 titulo_pag='Editar tarea',
+                 boton='Guardar cambios')
+
+    if request.method == 'POST':
+        datos, errores = validar_datos_tarea(
+            request.form, {p['id'] for p in proyectos})
+        if errores:
+            return render_template('formulario_tarea.html',
+                                   errores=errores,
+                                   valores=request.form.to_dict(),
+                                   **comun), 400
+        db_manager.actualizar_tarea(tarea_id, datos)
+        return redirect(url_for('index'))
+
+    d = tarea.to_dict()
+    valores = {
+        'titulo': d['titulo'],
+        'descripcion': d['descripcion'] or '',
+        'fecha_limite': d['fecha_limite'] or '',
+        'prioridad': d['prioridad'] or '',
+        # str: la plantilla compara con `proyecto.id|string`
+        'proyecto_id': str(d['proyecto_id']),
+    }
+    return render_template('formulario_tarea.html',
+                           errores={}, valores=valores, **comun)
 
 if __name__ == '__main__':
     # Aseguramos que la DB esté inicializada y corremos el servidor
