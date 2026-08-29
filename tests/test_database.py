@@ -1,4 +1,12 @@
-"""TF-0005 — Pruebas de persistencia sobre SQLite temporal."""
+"""Pruebas de persistencia sobre SQLite temporal.
+
+TF-0005 — CRUD básico.  TF-0009 — fecha_creacion.  TF-0013/0014 — completar/editar.
+TF-0015 — enforcement de claves foráneas (PRAGMA foreign_keys = ON).
+"""
+import sqlite3
+
+import pytest
+
 from src import database
 from src.modelos import Proyecto, Tarea
 
@@ -204,3 +212,67 @@ class TestActualizarTarea:
         assert db.actualizar_tarea(999999, _datos_edicion()) is False
         (t,) = db.obtener_tareas()
         assert t._titulo == "Intacta"
+
+
+class TestForeignKeys:
+    """TF-0015 — PRAGMA foreign_keys = ON en get_connection()."""
+
+    def test_pragma_activo_en_toda_conexion(self, db):
+        conn = database.get_connection()
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        conn.close()
+
+    def test_insert_raw_con_proyecto_inexistente_lanza_integrityerror(self, db):
+        conn = database.get_connection()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO tareas(titulo, proyecto_id) VALUES ('x', 999)")
+        conn.close()
+
+    def test_update_raw_a_proyecto_inexistente_lanza_integrityerror(self, db):
+        creada = db.crear_tarea(_tarea("ok", "2026-01-01"))
+        conn = database.get_connection()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE tareas SET proyecto_id = 999 WHERE id = ?", (creada.id,))
+        conn.close()
+
+    def test_crear_tarea_con_proyecto_inexistente_lanza_integrityerror(self, db):
+        with pytest.raises(sqlite3.IntegrityError):
+            db.crear_tarea(Tarea(titulo="Huerfana", fecha_limite="2026-01-01",
+                                 prioridad="Alta", proyecto_id=999))
+        assert db.obtener_tareas() == []
+
+    def test_actualizar_tarea_con_proyecto_inexistente_lanza_y_no_altera(self, db):
+        creada = db.crear_tarea(_tarea("Antes", "2026-01-01"))
+        with pytest.raises(sqlite3.IntegrityError):
+            db.actualizar_tarea(creada.id, _datos_edicion(proyecto_id=999))
+        assert db.obtener_tarea(creada.id)._titulo == "Antes"
+        assert db.obtener_tarea(creada.id)._proyecto_id == 0
+
+    def test_delete_de_proyecto_referenciado_lanza_integrityerror(self, db):
+        db.crear_tarea(_tarea("Referencia a 0", "2026-01-01"))
+        conn = database.get_connection()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("DELETE FROM proyectos WHERE id = 0")
+        conn.close()
+
+    # --- positivos / no-regresión ---
+
+    def test_operaciones_con_proyecto_existente_siguen_ok(self, db):
+        creada = db.crear_tarea(_tarea("Valida", "2026-01-01", proyecto_id=0))
+        assert db.actualizar_tarea(creada.id, _datos_edicion(proyecto_id=0)) is True
+        assert db.marcar_tarea_completada(creada.id) is True
+
+    def test_proyecto_id_null_sigue_permitido(self, db):
+        conn = database.get_connection()
+        conn.execute("INSERT INTO tareas(titulo, proyecto_id) VALUES ('sin proyecto', NULL)")
+        conn.commit()
+        n = conn.execute(
+            "SELECT COUNT(*) FROM tareas WHERE proyecto_id IS NULL").fetchone()[0]
+        conn.close()
+        assert n == 1
+
+    def test_seed_id_0_se_crea_con_fk_activa(self, db):
+        proyectos = db.obtener_proyectos()
+        assert any(p.id == 0 for p in proyectos)

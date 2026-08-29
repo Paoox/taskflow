@@ -22,7 +22,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
 | BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
 | BL-11 | `conftest.py` (raíz) y `docs/` no excluidos de la imagen Docker en `.dockerignore` | REFACTOR | P3 | PROMOTED | TF-0012 | TF-0005 |
-| BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | OPEN | — | Análisis TF-0007 |
+| BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | PROMOTED | TF-0015 | Análisis TF-0007 |
 | BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
 
 ---
@@ -121,9 +121,12 @@ Promovido a **TF-0012** (de remolque del endurecimiento del contenedor).
 pero SQLite no aplica las FK salvo que se ejecute `PRAGMA foreign_keys = ON` por
 conexión. Por eso es posible insertar tareas con `proyecto_id` huérfano por vías
 distintas a `POST /crear`. TF-0007 cubre el caso solo en la capa de aplicación
-(validando contra `obtener_proyectos()`). Activar el pragma es un cambio de
-comportamiento del motor con impacto transversal (afecta al seed `id=0`, a otras
-inserciones y a los tests); se aborda por separado.
+(validando contra `obtener_proyectos()`).
+
+Promovido a **TF-0015**: `get_connection()` ejecuta `PRAGMA foreign_keys = ON` en
+toda conexión. Sin tocar el esquema, la FK declarada ni `ON DELETE`/`ON UPDATE`.
+Impacto verificado nulo sobre datos existentes (`tareas.db` sin huérfanos); el
+seed `id=0` se crea igual y todos los tests insertan con `proyecto_id=0`.
 
 ### BL-13 — El contenedor arranca con clave de sesión efímera
 

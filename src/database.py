@@ -10,6 +10,10 @@ DATABASE_NAME = os.environ.get('TASKFLOW_DB', 'tareas.db')
 def get_connection():
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row
+    # TF-0015: SQLite no fuerza las claves foráneas salvo que se active por
+    # conexión (el pragma no se persiste en el archivo). Como primera sentencia
+    # tras connect(), fuera de cualquier transacción.
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
