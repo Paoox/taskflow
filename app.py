@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 from src.database import DBManager
 from src.modelos import Tarea, Proyecto
+from src.validaciones import validar_datos_tarea
 
 # Inicialización de la aplicación Flask
 app = Flask(__name__)
@@ -26,36 +27,32 @@ def index():
 @app.route('/crear', methods=['GET', 'POST'])
 def crear_tarea_web():
     """Maneja la creación de una tarea."""
-    
-    proyectos = db_manager.obtener_proyectos() # Necesario para el selector de proyecto
-    
+
+    proyectos = [p.to_dict() for p in db_manager.obtener_proyectos()]
+
     if request.method == 'POST':
-        # 1. Recolección de datos del formulario web
-        titulo = request.form.get('titulo')
-        descripcion = request.form.get('descripcion')
-        limite = request.form.get('fecha_limite')
-        prioridad = request.form.get('prioridad')
-        # Es vital convertir el ID del proyecto a entero, ya que viene como string
-        proyecto_id = int(request.form.get('proyecto_id')) 
-        
-        # 2. Creación del objeto de POO
-        nueva_tarea = Tarea(
-            titulo=titulo, 
-            descripcion=descripcion,
-            fecha_limite=limite, 
-            prioridad=prioridad, 
-            proyecto_id=proyecto_id
-        )
-        
-        # 3. Guardado en la Base de Datos (CRUD Create)
-        db_manager.crear_tarea(nueva_tarea)
-        
+        # 1. Validación server-side de los datos del formulario (TF-0007)
+        datos, errores = validar_datos_tarea(
+            request.form, {p['id'] for p in proyectos})
+
+        if errores:
+            # Re-render del formulario con los mensajes y los valores enviados.
+            return render_template('formulario_tarea.html',
+                                   proyectos=proyectos,
+                                   errores=errores,
+                                   valores=request.form.to_dict()), 400
+
+        # 2. Creación del objeto de POO y guardado (CRUD Create)
+        db_manager.crear_tarea(Tarea(**datos))
+
         # Después de la creación exitosa, redirigimos al inicio
         return redirect(url_for('index'))
-    
+
     # Si la solicitud es GET, simplemente mostramos el formulario
     return render_template('formulario_tarea.html',
-                           proyectos=[p.to_dict() for p in proyectos])
+                           proyectos=proyectos,
+                           errores={},
+                           valores={})
 
 if __name__ == '__main__':
     # Aseguramos que la DB esté inicializada y corremos el servidor

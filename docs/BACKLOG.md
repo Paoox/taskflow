@@ -11,7 +11,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 
 | ID | Título | Tipo | Prio | Estado | Ticket | Origen |
 |----|--------|------|------|--------|--------|--------|
-| BL-01 | `/crear` sin validación de entrada (500 con `proyecto_id` inválido/ausente) | BUG/SECURITY | P1 | OPEN | — | Análisis "siguiente ticket" |
+| BL-01 | `/crear` sin validación de entrada (500 con `proyecto_id` inválido/ausente) | BUG/SECURITY | P1 | PROMOTED | TF-0007 | Análisis "siguiente ticket" |
 | BL-02 | `obtener_tareas()` no preserva `fecha_creacion` al leer (se regenera con `now()`) | BUG/REFACTOR | P2 | OPEN | — | Análisis TF-0005 |
 | BL-03 | Formulario POST `/crear` sin protección CSRF | SECURITY | P2 | OPEN | — | Análisis "siguiente ticket" |
 | BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | OPEN | — | Discusión de tickets |
@@ -22,6 +22,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
 | BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
 | BL-11 | `conftest.py` (raíz) no excluido de la imagen Docker en `.dockerignore` | REFACTOR | P3 | OPEN | — | TF-0005 |
+| BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | OPEN | — | Análisis TF-0007 |
 
 ---
 
@@ -90,3 +91,13 @@ entorno para no depender de editar código.
 
 `conftest.py` (raíz) entra en la imagen vía `COPY . .`. Es inerte en runtime pero
 podría excluirse en `.dockerignore` junto con el resto de artefactos de test.
+
+### BL-12 — SQLite sin enforcement de claves foráneas
+
+`crear_tablas()` declara `FOREIGN KEY (proyecto_id) REFERENCES proyectos(id)`,
+pero SQLite no aplica las FK salvo que se ejecute `PRAGMA foreign_keys = ON` por
+conexión. Por eso es posible insertar tareas con `proyecto_id` huérfano por vías
+distintas a `POST /crear`. TF-0007 cubre el caso solo en la capa de aplicación
+(validando contra `obtener_proyectos()`). Activar el pragma es un cambio de
+comportamiento del motor con impacto transversal (afecta al seed `id=0`, a otras
+inserciones y a los tests); se aborda por separado.

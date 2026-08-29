@@ -8,38 +8,63 @@
     <a class="btn" href="{{ url_for('index') }}">Volver</a>
 </section>
 
+{% if errores %}
+<p class="form-error-summary" role="alert">Revisa los campos marcados.</p>
+{% endif %}
+
 <form class="form" method="POST" action="{{ url_for('crear_tarea_web') }}">
     <div class="form-field">
         <label for="titulo">Título</label>
-        <input type="text" id="titulo" name="titulo" required maxlength="200">
+        <input type="text" id="titulo" name="titulo" required maxlength="200"
+               value="{{ valores.get('titulo', '') }}">
+        {% if errores.get('titulo') %}
+        <p class="field-error">{{ errores['titulo'] }}</p>
+        {% endif %}
     </div>
 
     <div class="form-field">
         <label for="descripcion">Descripción</label>
-        <textarea id="descripcion" name="descripcion" rows="3"></textarea>
+        <textarea id="descripcion" name="descripcion" rows="3">{{ valores.get('descripcion', '') }}</textarea>
+        {% if errores.get('descripcion') %}
+        <p class="field-error">{{ errores['descripcion'] }}</p>
+        {% endif %}
     </div>
 
     <div class="form-field">
         <label for="fecha_limite">Fecha límite</label>
-        <input type="date" id="fecha_limite" name="fecha_limite">
+        <input type="date" id="fecha_limite" name="fecha_limite"
+               value="{{ valores.get('fecha_limite', '') }}">
+        {% if errores.get('fecha_limite') %}
+        <p class="field-error">{{ errores['fecha_limite'] }}</p>
+        {% endif %}
     </div>
 
     <div class="form-field">
         <label for="prioridad">Prioridad</label>
+        {% set prioridad_sel = valores.get('prioridad', 'Media') %}
         <select id="prioridad" name="prioridad">
-            <option value="Alta">Alta</option>
-            <option value="Media" selected>Media</option>
-            <option value="Baja">Baja</option>
+            <option value="Alta" {% if prioridad_sel == 'Alta' %}selected{% endif %}>Alta</option>
+            <option value="Media" {% if prioridad_sel == 'Media' %}selected{% endif %}>Media</option>
+            <option value="Baja" {% if prioridad_sel == 'Baja' %}selected{% endif %}>Baja</option>
         </select>
+        {% if errores.get('prioridad') %}
+        <p class="field-error">{{ errores['prioridad'] }}</p>
+        {% endif %}
     </div>
 
     <div class="form-field">
         <label for="proyecto_id">Proyecto</label>
         <select id="proyecto_id" name="proyecto_id" required>
             {% for proyecto in proyectos %}
-            <option value="{{ proyecto.id }}">{{ proyecto.nombre }}</option>
+            <option value="{{ proyecto.id }}"
+                {% if valores.get('proyecto_id') == proyecto.id|string %}selected{% endif %}>
+                {{ proyecto.nombre }}
+            </option>
             {% endfor %}
         </select>
+        {% if errores.get('proyecto_id') %}
+        <p class="field-error">{{ errores['proyecto_id'] }}</p>
+        {% endif %}
     </div>
 
     <div class="form-actions">
