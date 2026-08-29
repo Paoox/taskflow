@@ -1,9 +1,10 @@
 # TF-0003-01 — Contenedorizacion inicial de Taskflow
 # Arquitectura de esta etapa:  Docker -> Flask -> SQLite  (un solo servicio)
 #
-# Python 3.8 para coincidir con el entorno verificado en requirements.txt
-# (los pines de importlib-metadata / zipp asumen Python < 3.10).
-FROM python:3.8-slim
+# TF-0011: runtime actualizado a Python 3.12 (3.8 quedo EOL, sin parches desde
+# 2024-10). La imagen es la referencia del entorno; el host de desarrollo no
+# tiene Python 3.12 instalado y la verificacion se hizo con python:3.12-slim.
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

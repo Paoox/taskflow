@@ -17,7 +17,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | OPEN | — | Discusión de tickets |
 | BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | OPEN | — | Análisis "siguiente ticket" |
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
-| BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
+| BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | PROMOTED | TF-0011 | doc TF-0003-01 |
 | BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P2 | PROMOTED | TF-0010 | TF-0005 |
 | BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
 | BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
@@ -71,6 +71,11 @@ explícito). Para uso no-dev haría falta gunicorn u otro WSGI. Anotado como
 permitiría además retirar los pines de `importlib-metadata` / `zipp`. Requiere
 re-verificar toda la suite y el arranque. Anotado en
 `docs/tickets/TF-0003-01.md`.
+
+Promovido a **TF-0011**: `Dockerfile` y CI → `python:3.12`; se eliminan
+`importlib-metadata` y `zipp` de `requirements.txt`. La validación en Python 3.12
+se hizo con `python:3.12-slim` (el host de desarrollo no tiene 3.12); la
+recreación del venv local en 3.12 queda pendiente hasta instalarlo en el host.
 
 ### BL-08 — CI y cobertura
 
