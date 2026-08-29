@@ -72,6 +72,20 @@ class DBManager:
         conn.close()
         return tarea
 
+    def marcar_tarea_completada(self, tarea_id):
+        """Marca una tarea como 'Completada' (TF-0013).
+
+        Devuelve True si actualizó una fila, False si el id no existe.
+        """
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE tareas SET estado = 'Completada' WHERE id = ?", (tarea_id,))
+        conn.commit()
+        afectadas = cursor.rowcount
+        conn.close()
+        return afectadas > 0
+
     def obtener_proyectos(self):
         conn = get_connection()
         cursor = conn.cursor()

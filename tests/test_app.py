@@ -3,6 +3,8 @@
 TF-0005 — smoke de endpoints.
 TF-0007 — validación server-side de POST /crear.
 TF-0008 — protección CSRF de las peticiones POST.
+TF-0012 — cookie de sesión.
+TF-0013 — completar tarea desde la UI.
 """
 import pytest
 
@@ -14,6 +16,14 @@ def _contar_tareas():
     n = conn.execute("SELECT COUNT(*) FROM tareas").fetchone()[0]
     conn.close()
     return n
+
+
+def _estado_tarea(tarea_id):
+    conn = database.get_connection()
+    fila = conn.execute(
+        "SELECT estado FROM tareas WHERE id = ?", (tarea_id,)).fetchone()
+    conn.close()
+    return fila["estado"] if fila else None
 
 
 VALIDO = {
@@ -149,3 +159,51 @@ def test_cookie_secure_off_por_defecto_y_flujo_csrf_intacto(client, csrf_token):
     resp = client.post("/crear", data=_datos(csrf_token))
     assert resp.status_code == 302
     assert _contar_tareas() == 1
+
+
+# --- TF-0013: completar tarea -------------------------------------------
+
+def _crear_y_obtener_id(client, csrf_token, **cambios):
+    assert client.post("/crear", data=_datos(csrf_token, **cambios)).status_code == 302
+    conn = database.get_connection()
+    tarea_id = conn.execute("SELECT id FROM tareas ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    conn.close()
+    return tarea_id
+
+
+def test_completar_tarea_redirige_y_cambia_estado(client, csrf_token):
+    tarea_id = _crear_y_obtener_id(client, csrf_token, titulo="Pendiente 1")
+    resp = client.post(f"/tareas/{tarea_id}/completar",
+                       data={"csrf_token": csrf_token})
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+    assert _estado_tarea(tarea_id) == "Completada"
+
+
+def test_completar_tarea_desaparece_de_la_lista_de_pendientes(client, csrf_token):
+    tarea_id = _crear_y_obtener_id(client, csrf_token, titulo="Se completa")
+    assert b"Se completa" in client.get("/").data
+    client.post(f"/tareas/{tarea_id}/completar", data={"csrf_token": csrf_token})
+    assert b"Se completa" not in client.get("/").data
+
+
+def test_completar_tarea_id_inexistente_responde_404(client, csrf_token):
+    resp = client.post("/tareas/999999/completar", data={"csrf_token": csrf_token})
+    assert resp.status_code == 404
+
+
+def test_completar_tarea_sin_csrf_responde_403(client, csrf_token):
+    tarea_id = _crear_y_obtener_id(client, csrf_token)
+    resp = client.post(f"/tareas/{tarea_id}/completar", data={})
+    assert resp.status_code == 403
+    assert _estado_tarea(tarea_id) == "Pendiente"
+
+
+def test_completar_tarea_get_no_permitido_405(client):
+    resp = client.get("/tareas/1/completar")
+    assert resp.status_code == 405
+
+
+def test_completar_tarea_id_no_numerico_404(client, csrf_token):
+    resp = client.post("/tareas/abc/completar", data={"csrf_token": csrf_token})
+    assert resp.status_code == 404

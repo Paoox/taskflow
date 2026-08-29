@@ -23,6 +23,11 @@
             <span class="badge badge-prioridad">{{ tarea.prioridad or '—' }}</span>
             <span class="task-card__due">Límite: {{ tarea.fecha_limite or '—' }}</span>
         </div>
+        <form method="POST" class="task-card__action"
+              action="{{ url_for('completar_tarea', tarea_id=tarea.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-small">Completar</button>
+        </form>
     </li>
     {% endfor %}
 </ul>

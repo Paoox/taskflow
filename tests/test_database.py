@@ -125,3 +125,28 @@ class TestFechaCreacion:
         conn.close()
         (leida,) = db.obtener_tareas()
         assert leida._fecha_creacion == almacenado
+
+
+class TestMarcarTareaCompletada:
+    """TF-0013 — DBManager.marcar_tarea_completada(id)."""
+
+    def test_actualiza_el_estado_y_devuelve_true(self, db):
+        creada = db.crear_tarea(_tarea("Cerrar", "2026-07-07"))
+        assert db.marcar_tarea_completada(creada.id) is True
+
+        (t,) = db.obtener_tareas(estado="Completada")
+        assert t._titulo == "Cerrar"
+        assert db.obtener_tareas(estado="Pendiente") == []
+
+    def test_id_inexistente_devuelve_false(self, db):
+        db.crear_tarea(_tarea("Otra", "2026-07-07"))
+        assert db.marcar_tarea_completada(999999) is False
+        # No debe alterar nada.
+        assert len(db.obtener_tareas(estado="Pendiente")) == 1
+
+    def test_idempotente_sobre_tarea_ya_completada(self, db):
+        creada = db.crear_tarea(_tarea("Ya hecha", "2026-07-07", estado="Completada"))
+        # La fila existe -> rowcount 1 aunque el valor no cambie.
+        assert db.marcar_tarea_completada(creada.id) is True
+        (t,) = db.obtener_tareas(estado="Completada")
+        assert t._estado == "Completada"

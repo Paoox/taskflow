@@ -81,6 +81,14 @@ def crear_tarea_web():
                            errores={},
                            valores={})
 
+
+@app.route('/tareas/<int:tarea_id>/completar', methods=['POST'])
+def completar_tarea(tarea_id):
+    """Marca una tarea como completada (TF-0013). CSRF cubierto por before_request."""
+    if not db_manager.marcar_tarea_completada(tarea_id):
+        abort(404)
+    return redirect(url_for('index'))
+
 if __name__ == '__main__':
     # Aseguramos que la DB esté inicializada y corremos el servidor
     print("Iniciando servidor Flask...")
