@@ -113,13 +113,14 @@ class DBManager:
         for fila in filas:
             # Recreamos el objeto Tarea a partir de los datos de la DB
             t = Tarea(
-                titulo=fila['titulo'], 
+                titulo=fila['titulo'],
                 fecha_limite=fila['fecha_limite'],
                 prioridad=fila['prioridad'],
                 proyecto_id=fila['proyecto_id'],
                 descripcion=fila['descripcion'],
                 id=fila['id'],
-                estado=fila['estado']
+                estado=fila['estado'],
+                fecha_creacion=fila['fecha_creacion']  # TF-0009: preservar el valor almacenado
             )
             tareas.append(t)
         return tareas

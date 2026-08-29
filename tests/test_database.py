@@ -88,3 +88,40 @@ class TestObtenerTareas:
     def test_estado_sin_coincidencias_devuelve_lista_vacia(self, db):
         db.crear_tarea(_tarea("A", "2026-01-01"))
         assert db.obtener_tareas(estado="Inexistente") == []
+
+
+class TestFechaCreacion:
+    """TF-0009 — obtener_tareas() debe devolver el fecha_creacion almacenado."""
+
+    def test_preserva_el_valor_almacenado(self, db):
+        db.crear_tarea(Tarea(
+            titulo="Con fecha", fecha_limite="2026-05-05", prioridad="Alta",
+            proyecto_id=0, fecha_creacion="2020-01-02 03:04:05"))
+        (t,) = db.obtener_tareas()
+        assert t._fecha_creacion == "2020-01-02 03:04:05"
+
+    def test_to_dict_refleja_el_valor_almacenado(self, db):
+        db.crear_tarea(Tarea(
+            titulo="Con fecha", fecha_limite="2026-05-05", prioridad="Alta",
+            proyecto_id=0, fecha_creacion="2020-01-02 03:04:05"))
+        (t,) = db.obtener_tareas()
+        assert t.to_dict()["fecha_creacion"] == "2020-01-02 03:04:05"
+
+    def test_estable_entre_lecturas_consecutivas(self, db):
+        # Tarea creada sin fecha_creacion explícito: el valor lo genera el
+        # constructor una vez y crear_tarea() lo persiste; dos lecturas deben
+        # devolver el mismo valor (antes de TF-0009 cambiaba en cada lectura).
+        db.crear_tarea(_tarea("Sin fecha explícita", "2026-05-05"))
+        primera = db.obtener_tareas()[0]._fecha_creacion
+        segunda = db.obtener_tareas()[0]._fecha_creacion
+        assert primera == segunda
+
+    def test_coincide_con_lo_que_persistio_crear_tarea(self, db):
+        creada = db.crear_tarea(_tarea("X", "2026-05-05"))
+        conn = database.get_connection()
+        almacenado = conn.execute(
+            "SELECT fecha_creacion FROM tareas WHERE id = ?",
+            (creada.id,)).fetchone()["fecha_creacion"]
+        conn.close()
+        (leida,) = db.obtener_tareas()
+        assert leida._fecha_creacion == almacenado
