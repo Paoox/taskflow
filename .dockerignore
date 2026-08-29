@@ -27,3 +27,10 @@ tests/
 pytest.ini
 requirements-dev.txt
 .pytest_cache/
+
+# CI y artefactos de cobertura (TF-0010)
+.github/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

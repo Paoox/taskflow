@@ -9,3 +9,9 @@ __pycache__/
 
 # Caché de pytest (TF-0005)
 .pytest_cache/
+
+# Artefactos de cobertura (TF-0010)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

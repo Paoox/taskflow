@@ -18,11 +18,12 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | OPEN | — | Análisis "siguiente ticket" |
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
 | BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
-| BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P3 | OPEN | — | TF-0005 |
+| BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P2 | PROMOTED | TF-0010 | TF-0005 |
 | BL-09 | `src/database.py` bloque `__main__` hace `os.remove(tareas.db)`: footgun de pérdida de datos + código demo | REFACTOR | P3 | OPEN | — | Lectura de código en TF-0005 |
 | BL-10 | `app.py` bloque `__main__` con `debug=True` fijo y sin config por entorno (host/port/debug) | REFACTOR | P3 | OPEN | — | Lectura de código |
 | BL-11 | `conftest.py` (raíz) no excluido de la imagen Docker en `.dockerignore` | REFACTOR | P3 | OPEN | — | TF-0005 |
 | BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | OPEN | — | Análisis TF-0007 |
+| BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | OPEN | — | Estado del repo tras TF-0008 |
 
 ---
 
@@ -73,8 +74,11 @@ re-verificar toda la suite y el arranque. Anotado en
 
 ### BL-08 — CI y cobertura
 
-La suite (`python -m pytest`, 23 tests) solo se ejecuta a mano. Faltan integración
-en CI y medición de cobertura.
+La suite (`python -m pytest`, 90 tests a fecha de la promoción) solo se ejecuta a
+mano. Faltan integración en CI y medición de cobertura.
+
+Promovido a **TF-0010**: GitHub Actions (`push` + `pull_request` sobre `main`),
+`pytest` + `pytest-cov` con cobertura informativa (sin umbral), solo Python 3.8.
 
 ### BL-09 — `__main__` destructivo en `database.py`
 
@@ -101,3 +105,14 @@ distintas a `POST /crear`. TF-0007 cubre el caso solo en la capa de aplicación
 (validando contra `obtener_proyectos()`). Activar el pragma es un cambio de
 comportamiento del motor con impacto transversal (afecta al seed `id=0`, a otras
 inserciones y a los tests); se aborda por separado.
+
+### BL-13 — El contenedor arranca con clave de sesión efímera
+
+Desde TF-0008, `app.secret_key` se resuelve con `obtener_secret_key()`: si
+`TASKFLOW_SECRET_KEY` no está definida, genera una clave efímera aleatoria y
+registra un `warning`. El `Dockerfile` define `TASKFLOW_DB` como `ENV` pero **no**
+`TASKFLOW_SECRET_KEY`, y no hay `docker-compose` ni guía de `docker run` que la
+inyecte. Consecuencia: un contenedor arranca siempre en modo desarrollo respecto a
+la sesión — los tokens CSRF y las sesiones no sobreviven a un reinicio ni son
+consistentes entre réplicas. Incluir también, para despliegue tras TLS, fijar
+`SESSION_COOKIE_SECURE = True` (hoy sin definir → la cookie viaja sobre HTTP).

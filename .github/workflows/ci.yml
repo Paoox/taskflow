@@ -1,0 +1,28 @@
+# TF-0010 — Integración continua: ejecuta la suite pytest con cobertura
+# informativa en cada push y pull request sobre main.
+name: CI
+
+# "on" entre comillas: evita que analizadores YAML 1.1 lo interpreten como
+# booleano (GitHub Actions acepta ambas formas).
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Ejecutar la suite con cobertura
+        run: python -m pytest
