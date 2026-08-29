@@ -1029,6 +1029,34 @@ trasladarse a su documento correspondiente sin perder información relevante.
 
 ---
 
+# 29.2 Backlog de hallazgos
+
+Todo hallazgo detectado durante el desarrollo que quede **fuera del alcance del
+ticket actual** (sección 18) debe registrarse en:
+
+```text
+docs/BACKLOG.md
+```
+
+en lugar de implementarse dentro del ticket en curso.
+
+`docs/BACKLOG.md` es un único archivo Markdown versionado en Git. No se debe
+introducir una base de datos, un sistema externo de gestión ni automatizaciones
+para el backlog.
+
+Cada ítem del backlog:
+
+* tiene un identificador propio `BL-XX`, independiente de la numeración `TF-XXXX`;
+* indica tipo (sección 11), prioridad (sección 12), estado y origen;
+* sigue el ciclo de estados `OPEN → PLANNED → PROMOTED → DONE`;
+* al pasar a `PROMOTED` se enlaza con su ticket `TF-XXXX` en la columna
+  correspondiente, y ese ticket tendrá su documento en `docs/tickets/`.
+
+El backlog es la fuente de verdad de los hallazgos pendientes. La conversación con
+Claude no debe considerarse el único registro.
+
+---
+
 # 30. Regla de mínima complejidad
 
 No implementar una solución compleja solamente porque podría ser útil en el futuro.
