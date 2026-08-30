@@ -15,7 +15,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-02 | `obtener_tareas()` no preserva `fecha_creacion` al leer (se regenera con `now()`) | BUG/REFACTOR | P2 | PROMOTED | TF-0009 | Análisis TF-0005 |
 | BL-03 | Formulario POST `/crear` sin protección CSRF | SECURITY | P2 | PROMOTED | TF-0008 | Análisis "siguiente ticket" |
 | BL-04 | Sin acción de completar/editar/eliminar tareas en la UI | FEATURE | P2 | DONE | TF-0013 (04a), TF-0014 (04b), TF-0016 (04c) | Discusión de tickets |
-| BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | PROMOTED | TF-0018 | Análisis "siguiente ticket" |
+| BL-05 | Falta `README.md` con arranque local + Docker | DOCS | P2 | DONE | TF-0018 | Análisis "siguiente ticket" |
 | BL-06 | Contenedor usa el servidor de desarrollo de Flask; falta WSGI de producción | DEVOPS | P2 | OPEN | — | doc TF-0003-01 |
 | BL-07 | Imagen base `python:3.8-slim`: Python 3.8 está EOL, sin parches de seguridad | SECURITY/DEVOPS | P2 | PROMOTED | TF-0011 | doc TF-0003-01 |
 | BL-08 | Suite sin CI ni cobertura (`pytest-cov`); no se ejecuta automáticamente | DEVOPS/TEST | P2 | PROMOTED | TF-0010 | TF-0005 |
@@ -75,14 +75,17 @@ Nota: BL-12 no era un bloqueo real de 04c — borrar una *tarea* no toca la FK
 No existe `README.md`. Debería documentar el arranque local (venv) y con Docker
 (`build` / `run`, `TASKFLOW_DB`, volumen `/app/data`). Complementa CLAUDE.md §29.
 
-Promovido a **TF-0018**: se crea `README.md` en la raíz (español) con
-descripción y estado, stack, estructura del repo, requisitos, arranque local con
-venv, arranque con Docker (volumen `/app/data`, `TASKFLOW_DB`), tabla de las
-variables de `.env.example`, tests + CI, badge de GitHub Actions, funcionalidades
-y rutas, aclaración de que Docker usa el servidor de desarrollo de Flask (WSGI de
-producción pendiente en BL-06) y enlaces a `CLAUDE.md` / `docs/BACKLOG.md` /
-`docs/tickets/`. Además se añade `README.md` a `.dockerignore` (fuera de la
-imagen, mismo criterio que BL-11). Sin cambios de código.
+Promovido a **TF-0018** y **DONE** (commit `1bc4964` en `origin/main`, CI #10 en
+verde): se crea `README.md` en la raíz (español) con descripción y estado, stack,
+estructura del repo, requisitos, arranque local con venv, arranque con Docker
+(volumen `/app/data`, `TASKFLOW_DB`), tabla de las variables de `.env.example`,
+tests + CI, badge de GitHub Actions, funcionalidades y rutas, aclaración de que
+Docker usa el servidor de desarrollo de Flask (WSGI de producción pendiente en
+BL-06) y enlaces a `CLAUDE.md` / `docs/BACKLOG.md` / `docs/tickets/`. Además se
+añade `README.md` a `.dockerignore` (fuera de la imagen, mismo criterio que
+BL-11). Sin cambios de código. Verificado en Docker (build OK, `GET /` → HTTP
+200, Python 3.12.14, `README.md` excluido de la imagen) y en GitHub Actions CI
+#10.
 
 ### BL-06 — WSGI de producción
 
