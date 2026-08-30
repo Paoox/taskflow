@@ -22,6 +22,7 @@ tareas.db
 CLAUDE.md
 .claude/
 docs/
+README.md
 
 # Pruebas y herramientas de test: no forman parte de la imagen de runtime
 # (TF-0005; conftest.py y docs/ anadidos en TF-0012 / BL-11 ampliado)
