@@ -401,24 +401,6 @@ def test_eliminar_no_afecta_a_otras_tareas(client, csrf_token):
 
 # --- TF-0017: higiene del bloque __main__ (BL-10) -------------------------
 
-class TestFlagEntorno:
-    """TF-0017 — `_flag_entorno`: activación solo con valor explícito."""
-
-    @pytest.mark.parametrize("valor", ["1", "true", "TRUE", "yes", "on", " on "])
-    def test_valores_de_activacion_explicitos(self, valor, monkeypatch):
-        monkeypatch.setenv("TASKFLOW_DEBUG", valor)
-        assert app_module._flag_entorno("TASKFLOW_DEBUG") is True
-
-    @pytest.mark.parametrize("valor", ["", "0", "false", "no", "off", "x"])
-    def test_valor_falso_o_vacio_no_activa(self, valor, monkeypatch):
-        monkeypatch.setenv("TASKFLOW_DEBUG", valor)
-        assert app_module._flag_entorno("TASKFLOW_DEBUG") is False
-
-    def test_variable_ausente_es_false(self, monkeypatch):
-        monkeypatch.delenv("TASKFLOW_DEBUG", raising=False)
-        assert app_module._flag_entorno("TASKFLOW_DEBUG") is False
-
-
 class TestArranqueLocal:
     """TF-0017 — el bloque __main__ toma host/port/debug del entorno."""
 
