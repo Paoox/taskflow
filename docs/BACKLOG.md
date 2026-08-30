@@ -24,6 +24,10 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-11 | `conftest.py` (raíz) y `docs/` no excluidos de la imagen Docker en `.dockerignore` | REFACTOR | P3 | PROMOTED | TF-0012 | TF-0005 |
 | BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | PROMOTED | TF-0015 | Análisis TF-0007 |
 | BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
+| BL-14 | Configuración de entorno dispersa (`os.environ.get` en `app.py`, `src/database.py`, `src/seguridad.py`) + parseo "truthy" duplicado; falta punto único | REFACTOR | P2 | PROMOTED | TF-0019 | Análisis arquitectura de agentes |
+| BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | PROMOTED | TF-0020 | Análisis arquitectura de agentes |
+| BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | PROMOTED | TF-0021 | Análisis arquitectura de agentes |
+| BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | PROMOTED | TF-0022 | Análisis arquitectura de agentes |
 
 ---
 
@@ -174,3 +178,73 @@ Promovido a **TF-0012**: `obtener_secret_key()` con fail-fast en producción
 neutral por defecto + contrato de despliegue documentado. Sin `docker-compose` y
 sin almacén de sesiones (la clave fija + cookie firmada de Flask basta para que la
 sesión sobreviva a un reinicio).
+
+### BL-14 — Configuración de entorno dispersa
+
+`os.environ.get(...)` se lee en tres módulos (`app.py`, `src/database.py`,
+`src/seguridad.py`) y el parseo de valores "truthy" está duplicado
+(`_VALORES_VERDADEROS` en `app.py`, `_VERDADEROS` en `src/seguridad.py`). No hay
+un punto único de configuración. La incorporación de agentes añadirá varias
+variables (`TASKFLOW_AI_*`, nivel de log) y necesita un lugar único donde
+declararlas.
+
+Detectado en el análisis de arquitectura para agentes (2026-08-29).
+
+Promovido a **TF-0019**: nuevo `src/config.py` con un helper booleano único y un
+accessor por variable, con **late binding** (lee `os.environ` en cada llamada,
+para no romper el aislamiento de `conftest.py` ni los `monkeypatch` de
+`test_seguridad.py`). Sin cambiar nombres, defaults ni comportamiento; sin tocar
+`conftest.py`. Es el cimiento de TF-0020, TF-0021 y TF-0022.
+
+### BL-15 — Sin observabilidad configurada
+
+No hay configuración de `logging`: la única traza es `app.logger.warning(...)` en
+`obtener_secret_key()`. No hay formato consistente, nivel por entorno ni
+identificador de correlación. `CLAUDE.md` §26 ("registrar errores") y §28
+(trazabilidad) no son realizables en ese estado.
+
+Detectado en el análisis de arquitectura para agentes (2026-08-29).
+
+Promovido a **TF-0020**: nuevo `src/observabilidad.py` con `configurar_logging()`
+idempotente (biblioteca estándar, sin dependencias), nivel por
+`TASKFLOW_LOG_LEVEL`, y un `correlation_id` **por petición HTTP** (`contextvars`)
+más un helper reutilizable. En esta etapa **no** se construye trazabilidad
+específica de agentes; el único consumidor es la app web.
+
+### BL-16 — Falta el andamiaje de la capa de agentes
+
+No existe ninguna capa de IA/agentes. Para incorporar el primer agente hace falta,
+como andamiaje mínimo y en Python puro: las estructuras del contrato de `CLAUDE.md`
+§27 (entrada/salida), una interfaz de proveedor de IA desacoplada del núcleo
+(§26), una implementación eco sin red ni coste para validar contrato e
+integración, y la ubicación separada de los prompts (§26).
+
+Detectado en el análisis de arquitectura para agentes (2026-08-29).
+
+Promovido a **TF-0021**: `src/agentes/contrato.py` (dataclasses `EntradaAgente` /
+`SalidaAgente`, mínimas y alineadas con §27), `src/ai/cliente.py` (`ClienteIA`
+como `Protocol` + `ClienteEco` deliberadamente simple y determinista, sin red) y
+`src/ai/prompts/` (convención + helper `cargar_prompt`). **Sin** proveedor real,
+SDK, API ni infraestructura. **No** se implementan Documentador, Arquitecto,
+Orquestador ni runner. `pytest.ini` no se modifica automáticamente: se documenta
+si `--cov=src` recoge los módulos nuevos y, si no, el cambio de una línea se
+somete a revisión.
+
+### BL-17 — Sin registro persistente de ejecuciones
+
+`CLAUDE.md` §28 exige poder relacionar toda acción relevante con un ticket y, más
+adelante, registrar "qué agente realizó qué acción y por qué". Hoy esa
+información solo vive en Git y en los Markdown de `docs/`. No hay ningún registro
+máquina-legible.
+
+Detectado en el análisis de arquitectura para agentes (2026-08-29).
+
+Promovido a **TF-0022**: una única tabla nueva `acciones`
+(`id, ticket, actor, tipo, entrada, resultado, estado, creado_en,
+actualizado_en`) creada en `crear_tablas()` con el patrón actual
+(`CREATE TABLE IF NOT EXISTS`, sin ORM ni migraciones) y un
+`RepositorioAcciones` que trabaja con **JSON genérico** (no importa las
+dataclasses de TF-0021). Sin FK sobre `ticket` (es un `TF-XXXX` textual, no una
+fila de `tareas`/`proyectos`). Es infraestructura de trazabilidad, no parte del
+dominio de tareas. La concurrencia (WAL / `busy_timeout`) queda fuera de alcance
+para un ticket posterior.
