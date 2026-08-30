@@ -1,10 +1,11 @@
 import sqlite3
 from .modelos import Tarea, Proyecto
-import os
+from . import config
 
 # Ruta configurable via entorno para permitir montar un volumen en Docker
-# (CLAUDE.md 25.5). Por defecto mantiene el comportamiento local previo.
-DATABASE_NAME = os.environ.get('TASKFLOW_DB', 'tareas.db')
+# (CLAUDE.md 25.5). Resuelta en import vía config (TF-0019); el valor por
+# defecto conserva el comportamiento local previo.
+DATABASE_NAME = config.ruta_db()
 
 
 def get_connection():

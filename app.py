@@ -1,7 +1,6 @@
 # app.py
-import os
-
 from flask import Flask, render_template, request, redirect, url_for, session, abort
+from src import config
 from src.database import DBManager
 from src.modelos import Tarea, Proyecto
 from src.validaciones import validar_datos_tarea
@@ -142,22 +141,13 @@ def editar_tarea(tarea_id):
                            errores={}, valores=valores, **comun)
 
 
-_VALORES_VERDADEROS = {'1', 'true', 'yes', 'on'}
-
-
-def _flag_entorno(nombre):
-    """True solo si la variable de entorno `nombre` tiene un valor de activación
-    explícito (`1`, `true`, `yes`, `on`). Cualquier otro valor (incluido `0` o
-    vacío) devuelve False."""
-    return os.environ.get(nombre, '').strip().lower() in _VALORES_VERDADEROS
-
-
 if __name__ == '__main__':
     # Arranque para desarrollo local (TF-0017 / BL-10). Docker usa `flask run`
     # (ver Dockerfile), no este bloque. Configuración por entorno con defaults
-    # seguros: sin debugger de Werkzeug y solo loopback salvo opt-in explícito.
+    # seguros (vía src.config, TF-0019): sin debugger de Werkzeug y solo loopback
+    # salvo opt-in explícito.
     app.run(
-        host=os.environ.get('TASKFLOW_HOST', '127.0.0.1'),
-        port=int(os.environ.get('TASKFLOW_PORT', '5000')),
-        debug=_flag_entorno('TASKFLOW_DEBUG'),
+        host=config.host(),
+        port=config.puerto(),
+        debug=config.debug_activado(),
     )
