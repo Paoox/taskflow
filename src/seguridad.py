@@ -10,11 +10,16 @@ TF-0012 — endurecimiento de la sesión:
 
 TF-0019 — la lectura y el parseo del entorno se delegan en ``src.config``; este
 módulo conserva sus funciones públicas y su comportamiento.
+
+TF-0020 — cuando no se inyecta un ``logger``, el warning de clave de sesión
+efímera se emite al logger central (``src.observabilidad``). La firma pública, el
+texto y la condición del warning no cambian.
 """
 import hmac
 import secrets
 
 from . import config
+from .observabilidad import obtener_logger
 
 CSRF_TOKEN_BYTES = 32
 
@@ -69,6 +74,5 @@ def obtener_secret_key(logger=None):
         f"{config.SECRET_KEY_ENV} no está definida; se usa una clave efímera aleatoria. "
         "Válido solo para desarrollo: en despliegue define esta variable."
     )
-    if logger is not None:
-        logger.warning(mensaje)
+    (logger if logger is not None else obtener_logger()).warning(mensaje)
     return secrets.token_hex(32)

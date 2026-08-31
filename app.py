@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, render_template, request, redirect, url_for, session, abort
+from flask import Flask, render_template, request, redirect, url_for, session, abort, g
 from src import config
 from src.database import DBManager
 from src.modelos import Tarea, Proyecto
@@ -7,13 +7,21 @@ from src.validaciones import validar_datos_tarea
 from src.seguridad import (
     generar_token, token_valido, obtener_secret_key, cookie_secure_activada,
 )
+from src.observabilidad import (
+    configurar_logging, set_correlation_id, reset_correlation_id,
+)
 
 # Inicialización de la aplicación Flask
 app = Flask(__name__)
+# TF-0020: configuración única de logging. El nivel sale de TASKFLOW_LOG_LEVEL
+# (vía src.config); un valor no reconocido cae a INFO. Idempotente: importar o
+# re-ejecutar este módulo no acumula handlers.
+configurar_logging(config.nivel_log())
 # Clave de firma de sesión (TF-0008 / TF-0012). En despliegue debe venir de
 # TASKFLOW_SECRET_KEY; con TASKFLOW_ENV=production su ausencia aborta el arranque.
-# Sin esa señal, fallback efímero + warning (solo desarrollo).
-app.secret_key = obtener_secret_key(app.logger)
+# Sin esa señal, fallback efímero + warning (solo desarrollo); TF-0020: sin
+# logger explícito el warning va al logger central.
+app.secret_key = obtener_secret_key()
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 # TF-0012: cookie de sesión con atributo Secure cuando se sirve tras TLS
@@ -24,12 +32,34 @@ db_manager = DBManager()
 
 
 @app.before_request
+def asignar_correlation_id():
+    """TF-0020: asigna un correlation_id único a la petición y guarda el token
+    para restaurarlo en el teardown.
+
+    Registrado antes de `proteccion_csrf` para que toda petición —incluida la
+    que termina en `abort(403)`— tenga id y un teardown limpio. No emite log.
+    """
+    g._correlation_token = set_correlation_id()
+
+
+@app.before_request
 def proteccion_csrf():
     """Garantiza un token CSRF por sesión y lo exige en toda petición POST (TF-0008)."""
     session.setdefault("csrf_token", generar_token())
     if request.method == "POST":
         if not token_valido(request.form.get("csrf_token", ""), session.get("csrf_token", "")):
             abort(403)
+
+
+@app.teardown_request
+def limpiar_correlation_id(exc=None):
+    """TF-0020: restaura el correlation_id al valor de fallback al terminar la
+    petición.
+
+    `teardown_request` se ejecuta siempre, también si la vista lanzó una
+    excepción, así que el contextvar nunca queda "goteando" entre peticiones.
+    """
+    reset_correlation_id(g.pop("_correlation_token", None))
 
 
 @app.context_processor

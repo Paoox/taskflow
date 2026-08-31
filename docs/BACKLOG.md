@@ -25,7 +25,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-12 | SQLite sin `PRAGMA foreign_keys=ON`: no se fuerzan las claves foráneas (`tareas.proyecto_id`) a nivel de motor | REFACTOR/DB | P3 | PROMOTED | TF-0015 | Análisis TF-0007 |
 | BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
 | BL-14 | Configuración de entorno dispersa (`os.environ.get` en `app.py`, `src/database.py`, `src/seguridad.py`) + parseo "truthy" duplicado; falta punto único | REFACTOR | P2 | PROMOTED | TF-0019 | Análisis arquitectura de agentes |
-| BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | PROMOTED | TF-0020 | Análisis arquitectura de agentes |
+| BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | DONE | TF-0020 | Análisis arquitectura de agentes |
 | BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | PROMOTED | TF-0021 | Análisis arquitectura de agentes |
 | BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | PROMOTED | TF-0022 | Análisis arquitectura de agentes |
 
@@ -210,6 +210,15 @@ idempotente (biblioteca estándar, sin dependencias), nivel por
 `TASKFLOW_LOG_LEVEL`, y un `correlation_id` **por petición HTTP** (`contextvars`)
 más un helper reutilizable. En esta etapa **no** se construye trazabilidad
 específica de agentes; el único consumidor es la app web.
+
+**DONE** (2026-08-31): `src/observabilidad.py` (logger central `"taskflow"`,
+filtro de `correlation_id` en el logger para compatibilidad con `caplog`,
+`ContextVar` con fallback `"-"`), accessor `config.nivel_log()` con late binding,
+integración en `app.py` (`before_request` sin log + `teardown_request` que limpia
+el contextvar aun con excepción), y el warning de clave efímera al logger central
+sin cambiar firma/texto/condición. Suite: 248 passed, cobertura 100 % (incluida
+`src/observabilidad.py`). Sin tocar `conftest.py`, `pytest.ini`, Docker/CI ni
+tests existentes. Ver `docs/tickets/TF-0020.md` para el detalle y el SHA.
 
 ### BL-16 — Falta el andamiaje de la capa de agentes
 
