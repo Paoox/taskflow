@@ -218,7 +218,7 @@ integración en `app.py` (`before_request` sin log + `teardown_request` que limp
 el contextvar aun con excepción), y el warning de clave efímera al logger central
 sin cambiar firma/texto/condición. Suite: 248 passed, cobertura 100 % (incluida
 `src/observabilidad.py`). Sin tocar `conftest.py`, `pytest.ini`, Docker/CI ni
-tests existentes. Ver `docs/tickets/TF-0020.md` para el detalle y el SHA.
+tests existentes. Commit `65e3632`. Ver `docs/tickets/TF-0020.md` para el detalle.
 
 ### BL-16 — Falta el andamiaje de la capa de agentes
 
