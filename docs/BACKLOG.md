@@ -239,7 +239,7 @@ Orquestador ni runner. `pytest.ini` no se modifica automáticamente: se document
 si `--cov=src` recoge los módulos nuevos y, si no, el cambio de una línea se
 somete a revisión.
 
-**DONE** (2026-08-31, commit `PENDIENTE-SHA`): contrato con `SalidaAgente` =
+**DONE** (2026-08-31, commit `3a9cebd`): contrato con `SalidaAgente` =
 5 campos de §27 + `artefactos` + `meta` (Opción A del checkpoint, justificados
 por §26/§28/§29.1 y consumidos por TF-0022); `to_dict` = `dataclasses.asdict`,
 `from_dict` a mano; `ClienteIA` como `typing.Protocol` `@runtime_checkable`;
