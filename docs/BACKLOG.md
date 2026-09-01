@@ -301,7 +301,8 @@ Es un cambio con dependencia nueva + servicio externo + secretos → dispara
 `CLAUDE.md` §31 y requiere su propio ticket. **Previsto: TF-0024.** No
 implementado en TF-0023.
 
-Detectado / diferido en **TF-0023** (DONE 2026-08-31, ver `docs/tickets/TF-0023.md`).
+Detectado / diferido en **TF-0023** (DONE 2026-08-31, commit `657802b`, ver
+`docs/tickets/TF-0023.md`).
 
 ### BL-19 — Concurrencia SQLite (WAL / `busy_timeout`)
 
