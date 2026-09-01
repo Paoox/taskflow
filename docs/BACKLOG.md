@@ -28,6 +28,8 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | DONE | TF-0020 | Análisis arquitectura de agentes |
 | BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | DONE | TF-0021 | Análisis arquitectura de agentes |
 | BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | DONE | TF-0022 | Análisis arquitectura de agentes |
+| BL-18 | Falta proveedor LLM real: adaptador `ClienteIA` sobre un SDK, variables `TASKFLOW_AI_*`, manejo de secretos y de coste/latencia/privacidad | ARCH/AI | P2 | OPEN | — (previsto TF-0024) | TF-0023 (fuera de alcance por DA-1) |
+| BL-19 | Concurrencia SQLite: WAL / `busy_timeout` / reintentos para escritura de agentes en `acciones` en segundo plano mientras la web lee | DEVOPS/DB | P3 | OPEN | — | TF-0022 (R4) / TF-0023 (DA-13) |
 
 ---
 
@@ -280,4 +282,39 @@ Suite 324 passed, cobertura 100 % (`src/database.py` 89 stmts,
 `src/repositorios/acciones.py` 54 stmts). `--cov=src` recoge `src/repositorios/**`
 sin tocar `pytest.ini`. Sin dependencias nuevas ni cambios de concurrencia. Ver
 `docs/tickets/TF-0022.md`. Hallazgo abierto para un ticket posterior: WAL /
-`busy_timeout` cuando haya ejecución concurrente (D17).
+`busy_timeout` cuando haya ejecución concurrente (D17) → **BL-19**.
+
+### BL-18 — Proveedor LLM real
+
+TF-0023 construyó el runner y el primer agente (Documentador) usando **únicamente
+`ClienteEco`** (decisión DA-1): sin proveedor real, sin SDK, sin secretos, sin
+variables `TASKFLOW_AI_*`. Para una ejecución con un modelo real hace falta un
+adaptador que satisfaga `ClienteIA` (`completar(prompt, opciones) -> RespuestaIA`)
+sobre un SDK de proveedor, más:
+
+* accessors `TASKFLOW_AI_*` en `src/config.py` (clave, modelo, límites);
+* manejo de secretos (la clave nunca en el repo; `.env` / `.env.example`);
+* coste / latencia / privacidad (`CLAUDE.md` §26): timeouts reales, reintentos,
+  registro de errores saneado (sin volcar `str(exc)` con URLs/claves).
+
+Es un cambio con dependencia nueva + servicio externo + secretos → dispara
+`CLAUDE.md` §31 y requiere su propio ticket. **Previsto: TF-0024.** No
+implementado en TF-0023.
+
+Detectado / diferido en **TF-0023** (DONE 2026-08-31, ver `docs/tickets/TF-0023.md`).
+
+### BL-19 — Concurrencia SQLite (WAL / `busy_timeout`)
+
+El patrón "una conexión por operación" de `get_connection()` no usa WAL ni
+`busy_timeout`. Mientras solo escribe la app web de forma secuencial no hay
+problema, pero cuando un agente (runner) escriba en `acciones` en segundo plano
+—en un hilo o proceso aparte— mientras la web lee, SQLite puede devolver
+`database is locked`.
+
+Alcance de un futuro ticket: evaluar `PRAGMA journal_mode = WAL` y
+`PRAGMA busy_timeout` en `get_connection()` (o un mecanismo equivalente),
+midiendo el impacto sobre la suite y sobre el arranque en Docker. **No** se
+resuelve mientras no exista ejecución concurrente real.
+
+Origen: **TF-0022** (R4, anotado al cierre) formalizado en **TF-0023** (DA-13).
+No implementado en TF-0023.
