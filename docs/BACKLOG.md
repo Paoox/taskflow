@@ -27,7 +27,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-14 | Configuración de entorno dispersa (`os.environ.get` en `app.py`, `src/database.py`, `src/seguridad.py`) + parseo "truthy" duplicado; falta punto único | REFACTOR | P2 | PROMOTED | TF-0019 | Análisis arquitectura de agentes |
 | BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | DONE | TF-0020 | Análisis arquitectura de agentes |
 | BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | DONE | TF-0021 | Análisis arquitectura de agentes |
-| BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | PROMOTED | TF-0022 | Análisis arquitectura de agentes |
+| BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | DONE | TF-0022 | Análisis arquitectura de agentes |
 
 ---
 
@@ -267,3 +267,17 @@ dataclasses de TF-0021). Sin FK sobre `ticket` (es un `TF-XXXX` textual, no una
 fila de `tareas`/`proyectos`). Es infraestructura de trazabilidad, no parte del
 dominio de tareas. La concurrencia (WAL / `busy_timeout`) queda fuera de alcance
 para un ticket posterior.
+
+**DONE** (2026-08-31, commit `PENDIENTE-SHA`): `acciones` con
+`id INTEGER PRIMARY KEY AUTOINCREMENT`, sin FK, sin índices, sin `CHECK`. Estados
+`{EN_CURSO, COMPLETADA, FALLIDA}` validados solo en Python. Fechas
+`%Y-%m-%d %H:%M:%S` local naive. `RepositorioAcciones` (`registrar` / `marcar` /
+`obtener` / `listar`) usa `get_connection()` (una conexión por operación, sin
+`try/finally`); `entrada`/`resultado` se guardan como JSON string (`dict`/`list`
+→ `json.dumps`; `str` verbatim) y se leen crudos; `marcar` lanza `ValueError`
+ante estado inválido sin tocar la BD y `resultado=None` no modifica la columna.
+Suite 324 passed, cobertura 100 % (`src/database.py` 89 stmts,
+`src/repositorios/acciones.py` 54 stmts). `--cov=src` recoge `src/repositorios/**`
+sin tocar `pytest.ini`. Sin dependencias nuevas ni cambios de concurrencia. Ver
+`docs/tickets/TF-0022.md`. Hallazgo abierto para un ticket posterior: WAL /
+`busy_timeout` cuando haya ejecución concurrente (D17).

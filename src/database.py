@@ -48,6 +48,24 @@ def crear_tablas():
         )
     """)
 
+    # Tabla acciones (TF-0022): registro persistente de ejecuciones para la
+    # trazabilidad de CLAUDE.md §28. Es infraestructura de trazabilidad, no parte
+    # del dominio de tareas: sin FK (el `ticket` es un identificador textual
+    # TF-XXXX, no una fila de tareas/proyectos) y sin índices (§30).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS acciones (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket         TEXT,
+            actor          TEXT NOT NULL,
+            tipo           TEXT NOT NULL,
+            entrada        TEXT,
+            resultado      TEXT,
+            estado         TEXT NOT NULL,
+            creado_en      TEXT NOT NULL,
+            actualizado_en TEXT
+        )
+    """)
+
     try:
         cursor.execute(
             "INSERT INTO proyectos (id, nombre, descripcion, estado) VALUES (0, 'Tareas Generales', 'Tareas sin clasificar', 'Activo')")
