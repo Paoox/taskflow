@@ -28,7 +28,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | DONE | TF-0020 | Análisis arquitectura de agentes |
 | BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | DONE | TF-0021 | Análisis arquitectura de agentes |
 | BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | DONE | TF-0022 | Análisis arquitectura de agentes |
-| BL-18 | Falta proveedor LLM real: adaptador `ClienteIA` sobre un SDK, variables `TASKFLOW_AI_*`, manejo de secretos y de coste/latencia/privacidad | ARCH/AI | P2 | OPEN | — (previsto TF-0024) | TF-0023 (fuera de alcance por DA-1) |
+| BL-18 | Falta proveedor LLM real: adaptador `ClienteIA` sobre Ollama, mapeo request/response, transporte de red | ARCH/AI | P2 | PROMOTED | TF-0024 (abstracción) → TF-0025 (`ClienteOllama`) | TF-0023 (fuera de alcance por DA-1) |
 | BL-19 | Concurrencia SQLite: WAL / `busy_timeout` / reintentos para escritura de agentes en `acciones` en segundo plano mientras la web lee | DEVOPS/DB | P3 | OPEN | — | TF-0022 (R4) / TF-0023 (DA-13) |
 
 ---
@@ -284,25 +284,35 @@ sin tocar `pytest.ini`. Sin dependencias nuevas ni cambios de concurrencia. Ver
 `docs/tickets/TF-0022.md`. Hallazgo abierto para un ticket posterior: WAL /
 `busy_timeout` cuando haya ejecución concurrente (D17) → **BL-19**.
 
-### BL-18 — Proveedor LLM real
+### BL-18 — Proveedor LLM real (Ollama)
 
 TF-0023 construyó el runner y el primer agente (Documentador) usando **únicamente
-`ClienteEco`** (decisión DA-1): sin proveedor real, sin SDK, sin secretos, sin
-variables `TASKFLOW_AI_*`. Para una ejecución con un modelo real hace falta un
-adaptador que satisfaga `ClienteIA` (`completar(prompt, opciones) -> RespuestaIA`)
-sobre un SDK de proveedor, más:
+`ClienteEco`** (decisión DA-1): sin proveedor real, sin variables `TASKFLOW_AI_*`.
 
-* accessors `TASKFLOW_AI_*` en `src/config.py` (clave, modelo, límites);
-* manejo de secretos (la clave nunca en el repo; `.env` / `.env.example`);
-* coste / latencia / privacidad (`CLAUDE.md` §26): timeouts reales, reintentos,
-  registro de errores saneado (sin volcar `str(exc)` con URLs/claves).
+**TaskFlow no se diseña alrededor de un SDK SaaS.** El runtime objetivo de
+producción es **Ollama con un modelo local**, intercambiable mediante una capa
+desacoplada. Claude/OpenAI no forman parte de la arquitectura de producción.
 
-Es un cambio con dependencia nueva + servicio externo + secretos → dispara
-`CLAUDE.md` §31 y requiere su propio ticket. **Previsto: TF-0024.** No
-implementado en TF-0023.
+**TF-0024 (implementado)** entregó la **capa de abstracción / runtime de IA**:
+`crear_cliente()` (factoría desacoplada), registro de proveedores
+(`registrar` / `nombres`), accessors `TASKFLOW_AI_*` (`PROVIDER` / `BASE_URL` /
+`MODEL` / `TIMEOUT` / `API_KEY` / `MAX_RETRIES`) y la taxonomía `ErrorIA`
+(+ `ErrorConfiguracionIA`, `ErrorProveedorNoDisponible`, `ErrorRespuestaIA`).
+`ClienteEco` queda registrado como proveedor `"eco"` por defecto. **Sin código de
+red, sin dependencias nuevas, sin cambios de contrato ni de esquema** (no dispara
+§31). Ver `docs/tickets/TF-0024.md` y `docs/arquitectura/ADR-0001-runtime-ia.md`.
 
-Detectado / diferido en **TF-0023** (DONE 2026-08-31, commit `657802b`, ver
-`docs/tickets/TF-0023.md`).
+**TF-0025 (previsto):** adaptador real `ClienteOllama` implementando `ClienteIA`
+sobre `POST {BASE_URL}/api/generate` con **transporte stdlib `urllib.request`**
+(no `httpx`, DA-2); `registrar("ollama", ...)` en su propio módulo. Mapeo
+`response`→`texto`, `prompt_eval_count`/`eval_count`→tokens, `model`→`modelo`,
+`coste_estimado=0.0` (modelo local, sin coste monetario). `done_reason == "length"`
+→ `ErrorRespuestaIA` → FALLIDA (DA-3). Reintentos: `0` por defecto, Ollama local
+= fail fast (DA-6). Tests con transporte falso, **cero red en CI**; smoke en vivo
+= manual, fuera de CI (DA-10). Docker: imagen neutral; Ollama como proceso/servicio
+aparte (host o `docker-compose` — decisión de TF-0025, podría disparar §31).
+
+Origen: **TF-0023** (DONE 2026-08-31, commit `657802b`).
 
 ### BL-19 — Concurrencia SQLite (WAL / `busy_timeout`)
 
