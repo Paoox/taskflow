@@ -268,7 +268,7 @@ fila de `tareas`/`proyectos`). Es infraestructura de trazabilidad, no parte del
 dominio de tareas. La concurrencia (WAL / `busy_timeout`) queda fuera de alcance
 para un ticket posterior.
 
-**DONE** (2026-08-31, commit `PENDIENTE-SHA`): `acciones` con
+**DONE** (2026-08-31, commit `db6c69d`): `acciones` con
 `id INTEGER PRIMARY KEY AUTOINCREMENT`, sin FK, sin índices, sin `CHECK`. Estados
 `{EN_CURSO, COMPLETADA, FALLIDA}` validados solo en Python. Fechas
 `%Y-%m-%d %H:%M:%S` local naive. `RepositorioAcciones` (`registrar` / `marcar` /
