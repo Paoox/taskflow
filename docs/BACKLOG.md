@@ -26,7 +26,7 @@ vive como ticket en `docs/tickets/TF-XXXX.md`.
 | BL-13 | El contenedor arranca con clave de sesión efímera: `Dockerfile` no define `TASKFLOW_SECRET_KEY` ni hay guía de despliegue que la inyecte | SECURITY/DEVOPS | P2 | PROMOTED | TF-0012 | Estado del repo tras TF-0008 |
 | BL-14 | Configuración de entorno dispersa (`os.environ.get` en `app.py`, `src/database.py`, `src/seguridad.py`) + parseo "truthy" duplicado; falta punto único | REFACTOR | P2 | PROMOTED | TF-0019 | Análisis arquitectura de agentes |
 | BL-15 | Sin configuración de `logging` ni identificador de correlación por petición; solo un `logger.warning` suelto | DEVOPS | P2 | DONE | TF-0020 | Análisis arquitectura de agentes |
-| BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | PROMOTED | TF-0021 | Análisis arquitectura de agentes |
+| BL-16 | Falta el andamiaje de la capa de agentes: contrato `CLAUDE.md` §27, interfaz de proveedor IA desacoplada (§26), cliente eco sin red y prompts separados | ARCH/AI | P2 | DONE | TF-0021 | Análisis arquitectura de agentes |
 | BL-17 | Sin registro persistente de ejecuciones/acciones para la trazabilidad `CLAUDE.md` §28 (qué actor hizo qué y por qué) | ARCH | P2 | PROMOTED | TF-0022 | Análisis arquitectura de agentes |
 
 ---
@@ -238,6 +238,16 @@ SDK, API ni infraestructura. **No** se implementan Documentador, Arquitecto,
 Orquestador ni runner. `pytest.ini` no se modifica automáticamente: se documenta
 si `--cov=src` recoge los módulos nuevos y, si no, el cambio de una línea se
 somete a revisión.
+
+**DONE** (2026-08-31, commit `PENDIENTE-SHA`): contrato con `SalidaAgente` =
+5 campos de §27 + `artefactos` + `meta` (Opción A del checkpoint, justificados
+por §26/§28/§29.1 y consumidos por TF-0022); `to_dict` = `dataclasses.asdict`,
+`from_dict` a mano; `ClienteIA` como `typing.Protocol` `@runtime_checkable`;
+`ClienteEco` eco recortado a 500, determinista, sin red, coste 0, logger
+opcional; `cargar_prompt` con validación anti path-traversal y error tipado
+`PromptNoEncontrado(FileNotFoundError)`. Suite 289 passed, cobertura 100 % (incl.
+los 5 módulos nuevos). `--cov=src` los recoge sin tocar `pytest.ini`. Sin
+dependencias nuevas. Ver `docs/tickets/TF-0021.md`.
 
 ### BL-17 — Sin registro persistente de ejecuciones
 
