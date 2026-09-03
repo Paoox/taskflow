@@ -66,6 +66,27 @@ def crear_tablas():
         )
     """)
 
+    # Tabla expedientes (TF-0026): PROJECT_STATE, el expediente maestro de un
+    # proyecto de software orquestado (`src.proyectos.estado.ExpedienteProyecto`).
+    # Es un dominio distinto y sin relación con `proyectos` (el agrupador de
+    # tareas del CRUD): sin FK entre ambas tablas. `contenido`/`salud` guardan
+    # JSON (mismo criterio que `acciones.entrada`/`resultado`); `codigo`
+    # ("PROY-XXX") se deriva del `id` autoincremental, no se almacena aparte.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expedientes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre           TEXT NOT NULL,
+            checklist_version TEXT NOT NULL,
+            contenido        TEXT NOT NULL,
+            salud            TEXT,
+            readiness        TEXT,
+            estado_general   REAL,
+            creado_en        TEXT NOT NULL,
+            actualizado_en   TEXT,
+            last_analyzed_at TEXT
+        )
+    """)
+
     try:
         cursor.execute(
             "INSERT INTO proyectos (id, nombre, descripcion, estado) VALUES (0, 'Tareas Generales', 'Tareas sin clasificar', 'Activo')")
