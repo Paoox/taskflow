@@ -28,6 +28,14 @@ Las demás acciones (HANDOFF/PREGUNTAR/BLOQUEADO) son decisiones puras sin
 efecto propio más allá de persistir el snapshot de salud, ya visible en
 `expedientes.salud`/`readiness`.
 
+TF-0029 añade `recolector_evidencia` (opcional, default `None`): si se
+inyecta, se invoca justo antes de construir `EntradaAgente` para enriquecer
+`contexto`/`archivos_relevantes` con evidencia real (`src.tools`, vía
+`src.orquestador.evidencia`). Con `recolector_evidencia=None` el
+comportamiento es idéntico al de TF-0027. El propio `ejecutar_orquestador`
+no ejecuta ninguna Tool directamente: solo invoca la función que le inyectan,
+igual que ya hace con `cliente`/`agente_descubrimiento`.
+
 Sin dependencias nuevas. No importa Flask ni `src.app`.
 """
 from __future__ import annotations
@@ -40,6 +48,7 @@ from src.agentes.contrato import EntradaAgente
 from src.agentes.runner import ejecutar_agente
 from src.ai.cliente import ClienteIA
 from src.orquestador.contrato import AccionOrquestador, ResultadoOrquestador
+from src.orquestador.evidencia import RecolectorEvidencia
 from src.orquestador.fusion import fusionar_hallazgos, parsear_hallazgos
 from src.orquestador.preguntas import preguntas_pendientes
 from src.proyectos.errores import ExpedienteNoEncontrado, TransicionEstadoInvalida
@@ -48,10 +57,14 @@ from src.proyectos.salud import calcular_salud
 from src.repositorios.acciones import COMPLETADA, FALLIDA, RepositorioAcciones
 from src.repositorios.expedientes import RepositorioExpedientes
 
-__all__ = ["TIPO_ACCION_ORQUESTAR", "ejecutar_orquestador", "responder_pregunta"]
+__all__ = [
+    "TIPO_ACCION_ORQUESTAR", "TIPO_ACCION_RECOLECTAR_EVIDENCIA",
+    "ejecutar_orquestador", "responder_pregunta",
+]
 
 # Tipo/actor fijos y propios del Orquestador (no del agente inyectado).
 TIPO_ACCION_ORQUESTAR = "orquestar_descubrimiento"
+TIPO_ACCION_RECOLECTAR_EVIDENCIA = "recolectar_evidencia"
 _ACTOR_ORQUESTADOR = "orquestador"
 _ETAPA_ORQUESTADOR = "ORQUESTADOR"
 
@@ -88,11 +101,17 @@ def ejecutar_orquestador(
     *,
     repo_expedientes: Optional[RepositorioExpedientes] = None,
     repo_acciones: Optional[RepositorioAcciones] = None,
+    recolector_evidencia: Optional[RecolectorEvidencia] = None,
 ) -> ResultadoOrquestador:
     """Ejecuta un ciclo de coordinación sobre el expediente `codigo`.
 
     Lanza `ExpedienteNoEncontrado` si `codigo` no existe. No reintenta ni
     hace bucle interno.
+
+    `recolector_evidencia` (TF-0029) es opcional; con `None` (default) el
+    comportamiento es idéntico al de TF-0027. Si se inyecta, se invoca antes
+    de construir `EntradaAgente` para enriquecer `contexto`/
+    `archivos_relevantes` con evidencia real (ver `src.orquestador.evidencia`).
     """
     repo_exp = repo_expedientes if repo_expedientes is not None else RepositorioExpedientes()
     repo_acc = repo_acciones if repo_acciones is not None else RepositorioAcciones()
@@ -116,6 +135,23 @@ def ejecutar_orquestador(
         accion = AccionOrquestador.INVESTIGAR
 
     if accion == AccionOrquestador.INVESTIGAR:
+        contexto = "\n".join(f"- {p.campo}: {p.pregunta}" for p in preguntas)
+        archivos_relevantes: list[str] = []
+
+        if recolector_evidencia is not None:
+            evidencia_id = repo_acc.registrar(
+                ticket=codigo, actor=_ACTOR_ORQUESTADOR, tipo=TIPO_ACCION_RECOLECTAR_EVIDENCIA,
+            )
+            evidencia = recolector_evidencia(expediente, preguntas)
+            if evidencia.contexto_adicional:
+                contexto = f"{contexto}\n\n{evidencia.contexto_adicional}".strip()
+            archivos_relevantes = evidencia.archivos_relevantes
+            problemas.extend(evidencia.problemas)
+            repo_acc.marcar(
+                evidencia_id, COMPLETADA,
+                resultado={"archivos_relevantes": archivos_relevantes, "problemas": evidencia.problemas},
+            )
+
         accion_id = repo_acc.registrar(
             ticket=codigo, actor=_ACTOR_ORQUESTADOR, tipo=TIPO_ACCION_ORQUESTAR,
             entrada={"preguntas": [p.to_dict() for p in preguntas]},
@@ -123,7 +159,8 @@ def ejecutar_orquestador(
         entrada_agente = EntradaAgente(
             ticket=codigo,
             objetivo="Descubrimiento de los campos raíz de PROJECT_STATE",
-            contexto="\n".join(f"- {p.campo}: {p.pregunta}" for p in preguntas),
+            contexto=contexto,
+            archivos_relevantes=archivos_relevantes,
         )
         salida = ejecutar_agente(entrada_agente, cliente, agente_descubrimiento, repositorio=repo_acc)
         hallazgos, problemas_parseo = parsear_hallazgos(salida.resultado)
