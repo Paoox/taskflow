@@ -36,6 +36,17 @@ comportamiento es idéntico al de TF-0027. El propio `ejecutar_orquestador`
 no ejecuta ninguna Tool directamente: solo invoca la función que le inyectan,
 igual que ya hace con `cliente`/`agente_descubrimiento`.
 
+Corrección post-smoke-test (brief del cliente como fuente de primera clase):
+añade `repo_briefs` (opcional, default `None`). Si se inyecta y existe un
+brief inicial (`RepositorioBriefs.brief_inicial`) para `codigo`, su texto se
+antepone a `contexto` bajo un encabezado propio ("## Comunicación del
+cliente"), **separado** de las preguntas a investigar y de la evidencia de
+Tools — nunca mezclado con ellas como si fuera evidencia de archivos. Con
+`repo_briefs=None` (default) el comportamiento es idéntico al de TF-0029.
+Este mismo cambio retira `ticket`/`objetivo` de la zona de datos que el
+Descubridor presenta al modelo (ver `src.agentes.descubridor`): son metadata
+de coordinación de TaskFlow, nunca evidencia del proyecto.
+
 Sin dependencias nuevas. No importa Flask ni `src.app`.
 """
 from __future__ import annotations
@@ -55,6 +66,7 @@ from src.proyectos.errores import ExpedienteNoEncontrado, TransicionEstadoInvali
 from src.proyectos.estado import Dato, EstadoDato, NivelConfianza, OrigenDato
 from src.proyectos.salud import calcular_salud
 from src.repositorios.acciones import COMPLETADA, FALLIDA, RepositorioAcciones
+from src.repositorios.briefs import RepositorioBriefs
 from src.repositorios.expedientes import RepositorioExpedientes
 
 __all__ = [
@@ -69,6 +81,8 @@ _ACTOR_ORQUESTADOR = "orquestador"
 _ETAPA_ORQUESTADOR = "ORQUESTADOR"
 
 _FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
+_ENCABEZADO_BRIEF = "## Comunicación del cliente"
+_ENCABEZADO_PREGUNTAS = "## Preguntas a investigar"
 
 
 def _ahora() -> str:
@@ -102,6 +116,7 @@ def ejecutar_orquestador(
     repo_expedientes: Optional[RepositorioExpedientes] = None,
     repo_acciones: Optional[RepositorioAcciones] = None,
     recolector_evidencia: Optional[RecolectorEvidencia] = None,
+    repo_briefs: Optional[RepositorioBriefs] = None,
 ) -> ResultadoOrquestador:
     """Ejecuta un ciclo de coordinación sobre el expediente `codigo`.
 
@@ -112,6 +127,12 @@ def ejecutar_orquestador(
     comportamiento es idéntico al de TF-0027. Si se inyecta, se invoca antes
     de construir `EntradaAgente` para enriquecer `contexto`/
     `archivos_relevantes` con evidencia real (ver `src.orquestador.evidencia`).
+
+    `repo_briefs` es opcional; con `None` (default) el comportamiento es
+    idéntico al de TF-0029. Si se inyecta y existe un brief inicial para
+    `codigo`, su texto se antepone a `contexto` bajo su propio encabezado —
+    separado de las preguntas y de la evidencia de Tools, nunca mezclado con
+    ellas.
     """
     repo_exp = repo_expedientes if repo_expedientes is not None else RepositorioExpedientes()
     repo_acc = repo_acciones if repo_acciones is not None else RepositorioAcciones()
@@ -137,6 +158,17 @@ def ejecutar_orquestador(
     if accion == AccionOrquestador.INVESTIGAR:
         contexto = "\n".join(f"- {p.campo}: {p.pregunta}" for p in preguntas)
         archivos_relevantes: list[str] = []
+
+        if repo_briefs is not None:
+            brief = repo_briefs.brief_inicial(codigo)
+            if brief is not None:
+                # Sección propia y explícitamente distinta de las preguntas
+                # y de la evidencia de Tools: el brief es comunicación
+                # directa del cliente, no evidencia técnica recolectada.
+                contexto = (
+                    f"{_ENCABEZADO_BRIEF}\n{brief.texto}\n\n"
+                    f"{_ENCABEZADO_PREGUNTAS}\n{contexto}"
+                )
 
         if recolector_evidencia is not None:
             evidencia_id = repo_acc.registrar(

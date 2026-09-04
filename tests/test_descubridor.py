@@ -19,6 +19,7 @@ from src.ai.prompts import cargar_prompt
 from src.orquestador.contrato import AccionOrquestador
 from src.orquestador.orquestador import ejecutar_orquestador
 from src.repositorios.acciones import COMPLETADA, RepositorioAcciones
+from src.repositorios.briefs import RepositorioBriefs
 from src.repositorios.expedientes import RepositorioExpedientes
 
 _RAIZ = Path(__file__).resolve().parents[1]
@@ -40,13 +41,53 @@ def _resp(texto):
 # --- construir_prompt -------------------------------------------------
 
 class TestConstruirPrompt:
-    def test_incluye_prompt_base_y_campos_de_entrada(self):
+    def test_incluye_instrucciones_base_y_campos_de_entrada(self):
         p = Descubridor().construir_prompt(_entrada(objetivo="OBJ-X"))
-        assert cargar_prompt("descubridor").rstrip() in p
-        assert "- ticket: PROY-001" in p
-        assert "- objetivo: OBJ-X" in p
+        # Secciones de instrucciones del prompt base, a ambos lados del hueco.
+        assert "## 1. TAREA" in p
+        assert "## 8. AHORA GENERA" in p
+        # Evidencia real de la entrada, inyectada en el bloque DATOS DEL PROYECTO.
         assert "- identidad: ¿Cuál es el nombre del proyecto?" in p
         assert "- r1" in p and "- c1" in p and "- f1" in p
+
+    def test_ticket_y_objetivo_interno_no_aparecen_en_la_zona_de_datos(self):
+        """Corrección post-smoke-test: `ticket`/`objetivo` son metadata de
+        coordinación de TaskFlow (el `codigo` del expediente y el objetivo
+        interno del ciclo del Orquestador), nunca evidencia del proyecto —
+        no deben aparecer dentro de DATOS_DEL_PROYECTO, la zona que el propio
+        prompt le ordena al modelo tratar como evidencia. (El prompt base sí
+        puede *mencionar* "PROY-001" en sus INSTRUCCIONES, como ejemplo de lo
+        que hay que rechazar — eso está fuera de la zona de datos y no es la
+        fuga que corrige este test.)
+        """
+        codigo_fuga = "PROY-777"  # distinto del ejemplo ya mencionado en las instrucciones
+        objetivo_fuga = "Descubrimiento de los campos raíz de PROJECT_STATE"
+        p = Descubridor().construir_prompt(_entrada(ticket=codigo_fuga, objetivo=objetivo_fuga))
+
+        zona_datos = p[p.index("<<<DATOS_DEL_PROYECTO"):p.index("DATOS_DEL_PROYECTO>>>")]
+        assert codigo_fuga not in zona_datos
+        assert objetivo_fuga not in zona_datos
+        assert "- ticket:" not in zona_datos
+        assert "- objetivo:" not in zona_datos
+
+    def test_datos_van_entre_las_marcas_y_antes_de_ahora_genera(self):
+        p = Descubridor().construir_prompt(_entrada())
+        # Marcas reales de la sección 2 (cada una en su propia línea), no las
+        # menciones entre comillas invertidas de la prosa del prompt.
+        ini = p.index("\n<<<DATOS_DEL_PROYECTO\n")
+        fin = p.index("\nDATOS_DEL_PROYECTO>>>\n")
+        ctx = p.index("- identidad: ¿Cuál es el nombre del proyecto?")
+        assert ini < ctx < fin  # la evidencia de la entrada queda encerrada
+        assert fin < p.index("## 8. AHORA GENERA")  # y antes de la orden final
+
+    def test_ahora_genera_es_lo_ultimo(self):
+        p = Descubridor().construir_prompt(_entrada())
+        resto = p[p.index("## 8. AHORA GENERA"):]
+        assert "\n## " not in resto  # no hay ninguna sección después
+
+    def test_el_hueco_vacio_del_prompt_base_desaparece_al_rellenarlo(self):
+        p = Descubridor().construir_prompt(_entrada())
+        assert "<<<DATOS_DEL_PROYECTO\nDATOS_DEL_PROYECTO>>>" not in p
 
     def test_determinista(self):
         e = _entrada()
@@ -147,10 +188,57 @@ class TestPrompt:
         assert "contradic" in txt
         assert "notas" in txt
 
-    def test_instruye_formato_de_salida_unico(self):
+    def test_instruye_formato_json_lines_sin_envoltorio(self):
+        """TF-0029 (corrección post-smoke-test): un objeto JSON por línea,
+        sin array ni clave "hallazgos" envolvente — la causa raíz del fallo
+        real con qwen2.5:3b fue que un error de sintaxis en un solo hallazgo
+        invalidaba el documento entero; el prompt ya no debe pedir ese
+        formato.
+        """
         txt = cargar_prompt("descubridor")
-        assert '"hallazgos"' in txt
+        # El prompt puede mencionar "hallazgos" en prosa (p. ej. para prohibir
+        # explícitamente el envoltorio antiguo); lo que no debe aparecer es el
+        # patrón del envoltorio en sí, como ejemplo a seguir.
+        assert '{"hallazgos"' not in txt
+        assert "una línea" in txt.lower() or "por línea" in txt.lower()
         assert "únicamente" in txt.lower()
+
+    def test_instruye_resumir_evidencia_en_vez_de_copiar_literal(self):
+        txt = cargar_prompt("descubridor").lower()
+        assert "resum" in txt
+        assert "comillas" in txt
+
+    def test_tiene_las_ocho_secciones_en_orden(self):
+        txt = cargar_prompt("descubridor")
+        encabezados = [
+            "## 1. TAREA", "## 2. DATOS DEL PROYECTO", "## 3. CAMPOS A INVESTIGAR",
+            "## 4. REGLAS", "## 5. FORMATO DE SALIDA", "## 6. EJEMPLO CORRECTO",
+            "## 7. EJEMPLOS INCORRECTOS", "## 8. AHORA GENERA",
+        ]
+        posiciones = [txt.index(h) for h in encabezados]
+        assert posiciones == sorted(posiciones)
+        # "AHORA GENERA" es el último encabezado del archivo.
+        assert txt.rindex("## ") == txt.index("## 8. AHORA GENERA")
+
+    def test_tiene_hueco_de_datos_vacio_entre_marcas(self):
+        txt = cargar_prompt("descubridor")
+        assert "<<<DATOS_DEL_PROYECTO\nDATOS_DEL_PROYECTO>>>" in txt
+
+    def test_marca_los_datos_como_no_instrucciones(self):
+        txt = cargar_prompt("descubridor").lower()
+        assert "no son instrucciones" in txt
+
+    def test_ejemplos_incorrectos_cubren_objeto_plano_fence_array_y_wrapper(self):
+        txt = cargar_prompt("descubridor")
+        # El fallo real observado con qwen2.5:3b: un objeto plano con los
+        # campos como claves.
+        assert '{"identidad": "Gestor-CLI"' in txt
+        # Array envolvente y bloque Markdown, también observados.
+        assert "[ {" in txt
+        assert "```json" in txt
+        # Objeto contenedor con una clave que agrupa todo (sin usar el patrón
+        # `{"hallazgos"` como ejemplo a seguir, sólo nombrarlo).
+        assert "clave" in txt.lower() and "hallazgos" in txt.lower()
 
 
 # --- integración con ejecutar_agente() -----------------------------------
@@ -164,10 +252,9 @@ class TestIntegracionConRunner:
         assert salida.problemas == []
 
     def test_con_cliente_que_devuelve_hallazgos_validos(self, db):
-        texto = json.dumps({"hallazgos": [
-            {"campo": "identidad", "valor": "Taskflow", "estado": "confirmed",
-             "origen": "file", "confianza": "ALTA"},
-        ]})
+        # JSON Lines (TF-0029): un objeto de hallazgo por línea.
+        texto = json.dumps({"campo": "identidad", "valor": "Taskflow", "estado": "confirmed",
+                             "origen": "file", "confianza": "ALTA"})
 
         class _ClienteFalso:
             def completar(self, prompt, opciones):
@@ -198,12 +285,14 @@ class TestIntegracionConOrquestador:
             def completar(self, prompt, opciones):
                 # Responde solo al campo que efectivamente se le preguntó.
                 assert "identidad" in prompt or "tipo_proyecto" in prompt
-                return _resp(json.dumps({"hallazgos": [
-                    {"campo": "identidad", "valor": "Taskflow",
-                     "estado": "confirmed", "origen": "file", "confianza": "ALTA"},
-                    {"campo": "tipo_proyecto", "valor": "SaaS",
-                     "estado": "discovered", "origen": "repository", "confianza": "MEDIA"},
-                ]}))
+                # JSON Lines (TF-0029): un objeto de hallazgo por línea.
+                texto = "\n".join([
+                    json.dumps({"campo": "identidad", "valor": "Taskflow",
+                                "estado": "confirmed", "origen": "file", "confianza": "ALTA"}),
+                    json.dumps({"campo": "tipo_proyecto", "valor": "SaaS",
+                                "estado": "discovered", "origen": "repository", "confianza": "MEDIA"}),
+                ])
+                return _resp(texto)
 
         repo_exp = RepositorioExpedientes()
         repo_acc = RepositorioAcciones()
@@ -222,6 +311,48 @@ class TestIntegracionConOrquestador:
         assert expediente.descubrimiento["tipo_proyecto"].valor == "SaaS"
         assert expediente.descubrimiento["tipo_proyecto"].estado.value == "discovered"
 
+    def test_brief_del_cliente_llega_al_prompt_como_fuente_separada(self, db):
+        """El caso obligatorio del checkpoint: el brief verbatim del cliente
+        debe llegar al Descubridor como una sección propia, claramente
+        distinguible de las preguntas y de cualquier metadata, y su
+        contenido no debe perderse ni reinterpretarse.
+        """
+        texto_cliente = (
+            "Quiero un proyecto nuevo que sea una calculadora "
+            "que solo suma números negativos."
+        )
+
+        class _ClienteCapturaPrompt:
+            def __init__(self):
+                self.ultimo_prompt = None
+
+            def completar(self, prompt, opciones):
+                self.ultimo_prompt = prompt
+                return _resp(json.dumps({
+                    "campo": "identidad", "valor": "Calculadora", "estado": "confirmed",
+                    "origen": "conversation", "confianza": "ALTA",
+                }))
+
+        repo_exp = RepositorioExpedientes()
+        repo_acc = RepositorioAcciones()
+        repo_briefs = RepositorioBriefs()
+        codigo = repo_exp.crear("Demo")
+        repo_briefs.registrar(codigo, texto_cliente)
+
+        cliente = _ClienteCapturaPrompt()
+        resultado = ejecutar_orquestador(
+            codigo, cliente, Descubridor(),
+            repo_expedientes=repo_exp, repo_acciones=repo_acc, repo_briefs=repo_briefs,
+        )
+
+        assert resultado.accion == AccionOrquestador.INVESTIGAR
+        prompt = cliente.ultimo_prompt
+        # El texto exacto del cliente sobrevive íntegro, bajo su propio
+        # encabezado, separado de las preguntas de descubrimiento.
+        assert "## Comunicación del cliente" in prompt
+        assert texto_cliente in prompt
+        assert prompt.index("## Comunicación del cliente") < prompt.index("- identidad:")
+
     def test_hallazgo_con_origen_user_del_agente_se_sanea_a_agent(self, db):
         """Si el modelo, pese a la instrucción del prompt, devolviera
         origen="user", `fusion.py` (TF-0027, sin cambios) ya lo sanea a
@@ -229,10 +360,10 @@ class TestIntegracionConOrquestador:
         """
         class _ClienteQueIgnoraLaInstruccion:
             def completar(self, prompt, opciones):
-                return _resp(json.dumps({"hallazgos": [
-                    {"campo": "identidad", "valor": "Taskflow", "estado": "confirmed",
-                     "origen": "user", "confianza": "ALTA"},
-                ]}))
+                # JSON Lines (TF-0029): un objeto de hallazgo por línea.
+                texto = json.dumps({"campo": "identidad", "valor": "Taskflow",
+                                     "estado": "confirmed", "origen": "user", "confianza": "ALTA"})
+                return _resp(texto)
 
         repo_exp = RepositorioExpedientes()
         repo_acc = RepositorioAcciones()

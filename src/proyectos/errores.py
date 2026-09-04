@@ -14,6 +14,7 @@ __all__ = [
     "TransicionEstadoInvalida",
     "VersionChecklistNoEncontrada",
     "ExpedienteNoEncontrado",
+    "BriefInicialYaExiste",
 ]
 
 
@@ -42,4 +43,14 @@ class ExpedienteNoEncontrado(ErrorProyectos, ValueError):
     aquí no basta un `bool`: llamar a `guardar()`/`guardar_salud()` sobre un
     `codigo` inexistente casi siempre es un error del llamador, no un caso de
     negocio válido a tolerar en silencio).
+    """
+
+
+class BriefInicialYaExiste(ErrorProyectos, ValueError):
+    """Ya existe un `EntradaBrief` de tipo `INICIAL` para este `codigo`.
+
+    El brief inicial es el punto de entrada primario del cliente y debe ser
+    localizable sin ambigüedad (`RepositorioBriefs.brief_inicial()`): por
+    diseño, como máximo una fila `INICIAL` por expediente. Rondas
+    posteriores del cliente se registran con `tipo=RESPUESTA_CLIENTE`.
     """

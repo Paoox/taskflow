@@ -87,6 +87,27 @@ def crear_tablas():
         )
     """)
 
+    # Tabla briefs: comunicación original del cliente (brief inicial +
+    # rondas posteriores), separada de `expedientes` (PROJECT_STATE) y de
+    # `acciones` (trazabilidad de ejecuciones). Corrección arquitectónica
+    # aprobada tras los smoke tests de TF-0028/TF-0029: la metadata de
+    # coordinación de TaskFlow no debe mezclarse con la evidencia del
+    # proyecto, y el brief del cliente necesita su propia fuente de primera
+    # clase (`src.proyectos.brief.EntradaBrief`). Sin FK (mismo criterio que
+    # `acciones.ticket`: `codigo` es un identificador textual "PROY-XXX", no
+    # una fila de otra tabla) y sin índices (§30 CLAUDE.md).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS briefs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo      TEXT NOT NULL,
+            ronda       INTEGER NOT NULL,
+            tipo        TEXT NOT NULL,
+            texto       TEXT NOT NULL,
+            origen      TEXT NOT NULL,
+            recibido_en TEXT NOT NULL
+        )
+    """)
+
     try:
         cursor.execute(
             "INSERT INTO proyectos (id, nombre, descripcion, estado) VALUES (0, 'Tareas Generales', 'Tareas sin clasificar', 'Activo')")

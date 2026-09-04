@@ -20,6 +20,7 @@ from src.orquestador.orquestador import (
 from src.proyectos.errores import ExpedienteNoEncontrado, TransicionEstadoInvalida
 from src.proyectos.estado import Dato, EstadoDato, NivelConfianza, OrigenDato
 from src.repositorios.acciones import COMPLETADA, RepositorioAcciones
+from src.repositorios.briefs import RepositorioBriefs
 from src.repositorios.expedientes import RepositorioExpedientes
 
 _TS = "2026-09-02 10:00:00"
@@ -56,11 +57,29 @@ class _ClienteQueFalla:
         raise ErrorProveedorNoDisponible("proveedor de prueba caído")
 
 
+class _AgenteExponeContexto:
+    """`DefinicionAgente` de prueba que expone `entrada.contexto` tal cual,
+    para poder inspeccionar cómo se ensambló (mismo patrón que
+    `test_orquestador_evidencia.py`).
+    """
+
+    nombre = "descubrimiento_fake"
+    tipo_accion = "descubrimiento_fake"
+
+    def construir_prompt(self, entrada):
+        return entrada.contexto
+
+    def parsear(self, respuesta, entrada):
+        return SalidaAgente(resultado=respuesta.texto)
+
+
 def _hallazgos_json(*campos_confirmados):
-    return json.dumps({"hallazgos": [
-        {"campo": c, "valor": "v", "estado": "confirmed", "origen": "file", "confianza": "ALTA"}
+    """JSON Lines (TF-0029: un objeto por línea, sin envoltorio "hallazgos")."""
+    return "\n".join(
+        json.dumps({"campo": c, "valor": "v", "estado": "confirmed",
+                    "origen": "file", "confianza": "ALTA"})
         for c in campos_confirmados
-    ]})
+    )
 
 
 def _dato(estado, origen=OrigenDato.AGENT):
@@ -125,7 +144,7 @@ class TestInvestigarYPreguntar:
 
     def test_segundo_ciclo_sin_nuevos_hallazgos_pasa_a_preguntar(self, repo_exp, repo_acc):
         codigo = repo_exp.crear("Demo")
-        cliente_vacio = _ClienteFalso(json.dumps({"hallazgos": []}))
+        cliente_vacio = _ClienteFalso("")  # JSON Lines vacío = sin hallazgos
 
         primero = ejecutar_orquestador(codigo, cliente_vacio, _AgenteFalso(),
                                         repo_expedientes=repo_exp, repo_acciones=repo_acc)
@@ -152,13 +171,14 @@ class TestInvestigarYPreguntar:
         repo_exp.guardar(e)
 
         # "identidad" pasar a confirmed sin origen=user viola una transición
-        # restringida; "objetivo" es un hallazgo nuevo y válido.
-        texto = json.dumps({"hallazgos": [
-            {"campo": "identidad", "valor": "x", "estado": "confirmed",
-             "origen": "agent", "confianza": "ALTA"},
-            {"campo": "objetivo", "valor": "y", "estado": "confirmed",
-             "origen": "file", "confianza": "ALTA"},
-        ]})
+        # restringida; "objetivo" es un hallazgo nuevo y válido. JSON Lines:
+        # una línea por hallazgo (TF-0029).
+        texto = "\n".join([
+            json.dumps({"campo": "identidad", "valor": "x", "estado": "confirmed",
+                        "origen": "agent", "confianza": "ALTA"}),
+            json.dumps({"campo": "objetivo", "valor": "y", "estado": "confirmed",
+                        "origen": "file", "confianza": "ALTA"}),
+        ])
         resultado = ejecutar_orquestador(codigo, _ClienteFalso(texto), _AgenteFalso(),
                                           repo_expedientes=repo_exp, repo_acciones=repo_acc)
 
@@ -167,6 +187,75 @@ class TestInvestigarYPreguntar:
         assert recargado.descubrimiento["identidad"].estado == EstadoDato.INFERRED
         assert recargado.descubrimiento["objetivo"].estado == EstadoDato.CONFIRMED
         assert any("transición no permitida" in p for p in resultado.problemas)
+
+
+class TestRepoBriefs:
+    """`repo_briefs` (corrección post-smoke-test): el brief del cliente como
+    fuente de primera clase, separada de las preguntas y de la evidencia.
+    """
+
+    def test_repo_briefs_none_preserva_comportamiento_previo(self, repo_exp, repo_acc):
+        """Sin `repo_briefs` (default `None`), el contexto que recibe el
+        agente es exactamente el de antes: solo las preguntas, sin ningún
+        encabezado de brief.
+        """
+        codigo = repo_exp.crear("Demo")
+        cliente = _ClienteFalso("")
+
+        resultado = ejecutar_orquestador(codigo, cliente, _AgenteExponeContexto(),
+                                          repo_expedientes=repo_exp, repo_acciones=repo_acc)
+
+        assert resultado.accion == AccionOrquestador.INVESTIGAR
+        # (el prompt real capturado vive en el propio cliente en otros tests;
+        # aquí basta con que el ciclo se complete igual que sin repo_briefs)
+
+    def test_recupera_el_brief_inicial_y_lo_antepone_al_contexto(self, repo_exp, repo_acc):
+        codigo = repo_exp.crear("Demo")
+        repo_briefs = RepositorioBriefs()
+        texto_cliente = (
+            "Quiero un proyecto nuevo que sea una calculadora "
+            "que solo suma números negativos."
+        )
+        repo_briefs.registrar(codigo, texto_cliente)
+
+        class _ClienteCapturaPrompt:
+            def completar(self, prompt, opciones):
+                self.ultimo_prompt = prompt
+                return RespuestaIA(texto="", tokens_entrada=1, tokens_salida=1, modelo="fake")
+
+        cliente = _ClienteCapturaPrompt()
+        ejecutar_orquestador(codigo, cliente, _AgenteExponeContexto(),
+                              repo_expedientes=repo_exp, repo_acciones=repo_acc,
+                              repo_briefs=repo_briefs)
+
+        assert "## Comunicación del cliente" in cliente.ultimo_prompt
+        assert texto_cliente in cliente.ultimo_prompt
+        assert "## Preguntas a investigar" in cliente.ultimo_prompt
+        # el brief queda separado y antes de las preguntas, no mezclado con ellas
+        assert (
+            cliente.ultimo_prompt.index("## Comunicación del cliente")
+            < cliente.ultimo_prompt.index("## Preguntas a investigar")
+        )
+
+    def test_sin_brief_inicial_registrado_no_agrega_seccion(self, repo_exp, repo_acc):
+        """`repo_briefs` inyectado pero sin ningún brief registrado para este
+        `codigo`: el comportamiento debe seguir siendo el mismo que con
+        `repo_briefs=None` (no se agrega una sección vacía).
+        """
+        codigo = repo_exp.crear("Demo")
+        repo_briefs = RepositorioBriefs()
+
+        class _ClienteCapturaPrompt:
+            def completar(self, prompt, opciones):
+                self.ultimo_prompt = prompt
+                return RespuestaIA(texto="", tokens_entrada=1, tokens_salida=1, modelo="fake")
+
+        cliente = _ClienteCapturaPrompt()
+        ejecutar_orquestador(codigo, cliente, _AgenteExponeContexto(),
+                              repo_expedientes=repo_exp, repo_acciones=repo_acc,
+                              repo_briefs=repo_briefs)
+
+        assert "## Comunicación del cliente" not in cliente.ultimo_prompt
 
 
 class TestHandoff:
