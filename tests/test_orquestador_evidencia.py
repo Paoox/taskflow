@@ -161,11 +161,10 @@ class TestIntegracionConEjecutarOrquestador:
 
         class _ClienteQueLeeElContexto:
             def completar(self, prompt, opciones):
-                texto = json.dumps({"hallazgos": [
-                    {"campo": "identidad", "valor": "taskflow-cli", "estado": "confirmed",
-                     "origen": "file", "confianza": "ALTA",
-                     "notas": "leído de pyproject.toml"},
-                ]})
+                # JSON Lines (TF-0029): un objeto de hallazgo por línea.
+                texto = json.dumps({"campo": "identidad", "valor": "taskflow-cli",
+                                     "estado": "confirmed", "origen": "file",
+                                     "confianza": "ALTA", "notas": "leído de pyproject.toml"})
                 return RespuestaIA(texto=texto, tokens_entrada=1, tokens_salida=1, modelo="fake")
 
         repo_exp = RepositorioExpedientes()
