@@ -108,6 +108,192 @@ def crear_tablas():
         )
     """)
 
+    # --- Modelo conceptual consolidado del Expediente Maestro (Discovery) ---
+    # Checkpoint de persistencia mínima aprobado. Dominio nuevo e
+    # independiente de `expedientes`/`checklist` (PROJECT_STATE antiguo):
+    # ninguna tabla de esta sección tiene FK hacia `expedientes` — mismo
+    # criterio de vínculo flojo por `codigo` textual que ya usa `briefs`.
+    # `relaciones` es la única tabla de aristas del grafo (Requisito-
+    # >requiere->Capacidad, Capacidad->depende_de->Capacidad, Capacidad-
+    # >opera_sobre->Dato, Funcionalidad->agrupa->Requisito): una sola tabla
+    # genérica en vez de cuatro, aprobada como solución definitiva mientras
+    # no haya necesidad real de integridad referencial específica por tipo.
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS respuestas_formulario (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            pregunta_id      TEXT NOT NULL,
+            pregunta_texto   TEXT NOT NULL,
+            tipo_pregunta    TEXT NOT NULL,
+            respuesta        TEXT NOT NULL,
+            respondido_en    TEXT NOT NULL,
+            accion_id_origen INTEGER
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS perfiles (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            nombre           TEXT NOT NULL,
+            descripcion      TEXT,
+            naturaleza       TEXT NOT NULL,
+            origen           TEXT NOT NULL,
+            confianza        TEXT NOT NULL,
+            accion_id_origen INTEGER,
+            fuente_directa   TEXT,
+            creado_en        TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS requisitos (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            descripcion      TEXT NOT NULL,
+            naturaleza       TEXT NOT NULL,
+            origen           TEXT NOT NULL,
+            confianza        TEXT NOT NULL,
+            estado           TEXT NOT NULL,
+            accion_id_origen INTEGER,
+            fuente_directa   TEXT,
+            creado_en        TEXT NOT NULL,
+            actualizado_en   TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS capacidades (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            descripcion      TEXT NOT NULL,
+            tipo             TEXT NOT NULL,
+            naturaleza       TEXT NOT NULL,
+            origen           TEXT NOT NULL,
+            confianza        TEXT NOT NULL,
+            accion_id_origen INTEGER,
+            fuente_directa   TEXT,
+            creado_en        TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS funcionalidades (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo      TEXT NOT NULL,
+            nombre      TEXT NOT NULL,
+            descripcion TEXT,
+            tier        TEXT,
+            creado_en   TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS datos (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            descripcion      TEXT NOT NULL,
+            temporalidad     TEXT,
+            sensibilidad     TEXT,
+            naturaleza       TEXT NOT NULL,
+            origen           TEXT NOT NULL,
+            confianza        TEXT NOT NULL,
+            accion_id_origen INTEGER,
+            fuente_directa   TEXT,
+            creado_en        TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS restricciones (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo           TEXT NOT NULL,
+            tipo             TEXT NOT NULL,
+            descripcion      TEXT NOT NULL,
+            naturaleza       TEXT NOT NULL,
+            origen           TEXT NOT NULL,
+            accion_id_origen INTEGER,
+            fuente_directa   TEXT,
+            creado_en        TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS features_propuestas (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo                 TEXT NOT NULL,
+            descripcion            TEXT NOT NULL,
+            motivo                 TEXT NOT NULL,
+            origen                 TEXT NOT NULL,
+            confianza              TEXT NOT NULL,
+            impacto                TEXT,
+            estado                 TEXT NOT NULL,
+            campo_relacionado_tipo TEXT,
+            campo_relacionado_id   INTEGER,
+            accion_id_origen       INTEGER,
+            creado_en              TEXT NOT NULL,
+            actualizado_en         TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS gaps (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo                TEXT NOT NULL,
+            entidad_afectada_tipo TEXT NOT NULL,
+            entidad_afectada_id   INTEGER,
+            campo_o_concepto      TEXT NOT NULL,
+            motivo                TEXT,
+            bloquea               TEXT NOT NULL,
+            criticidad            TEXT,
+            estado                TEXT NOT NULL,
+            creado_en             TEXT NOT NULL,
+            resuelto_en           TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS contradicciones (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo                TEXT NOT NULL,
+            entidad_tipo          TEXT NOT NULL,
+            concepto              TEXT NOT NULL,
+            afirmaciones          TEXT NOT NULL,
+            estado                TEXT NOT NULL,
+            resolucion_valor      TEXT,
+            resolucion_accion_id  INTEGER,
+            creado_en             TEXT NOT NULL,
+            resuelto_en           TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS relaciones (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo       TEXT NOT NULL,
+            tipo         TEXT NOT NULL,
+            origen_tipo  TEXT NOT NULL,
+            origen_id    INTEGER NOT NULL,
+            destino_tipo TEXT NOT NULL,
+            destino_id   INTEGER NOT NULL,
+            creado_en    TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS estado_observado_versiones (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo                      TEXT NOT NULL,
+            version                     INTEGER NOT NULL,
+            capturado_en                TEXT NOT NULL,
+            tecnologias_detectadas      TEXT,
+            funcionalidades_detectadas  TEXT,
+            aparenta_funcionar          TEXT,
+            accion_id_origen            INTEGER
+        )
+    """)
+
     try:
         cursor.execute(
             "INSERT INTO proyectos (id, nombre, descripcion, estado) VALUES (0, 'Tareas Generales', 'Tareas sin clasificar', 'Activo')")
