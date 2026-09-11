@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+
+{% block title %}Resultado Discovery · Taskflow{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <h1>Resultado — {{ codigo }}</h1>
+    <a class="btn" href="{{ url_for('discovery_nuevo') }}">Nueva corrida</a>
+</section>
+
+{% if not completo %}
+<p class="empty-state">El formulario todavía no está completo.
+    <a href="{{ url_for('discovery_formulario', codigo=codigo) }}">Continuar respondiendo</a>.
+</p>
+
+{% elif not ejecutado %}
+<p class="empty-state">El formulario está completo, pero Discovery todavía no se ha ejecutado.
+    <a href="{{ url_for('discovery_formulario', codigo=codigo) }}">Ir a ejecutarlo</a>.
+</p>
+
+{% else %}
+
+{% if fallido %}
+<p class="form-error-summary" role="alert">Discovery falló: {{ error }}</p>
+{% endif %}
+
+{% if problemas %}
+<section class="discovery-avisos">
+    <h2>Avisos de esta corrida</h2>
+    <ul>
+        {% for p in problemas %}
+        <li>{{ p }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if entidades %}
+<section class="discovery-grupo">
+    <h2>Perfiles ({{ entidades.perfiles|length }})</h2>
+    {% if entidades.perfiles %}
+    <ul class="discovery-entidad-list">
+        {% for e in entidades.perfiles %}
+        <li class="discovery-entidad">
+            <strong>{{ e.nombre }}</strong> — {{ e.descripcion }}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ e.confianza.value }}</span>
+                {% if e.fuente_directa %}<span class="badge">respuesta #{{ e.fuente_directa.referencia }}</span>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguno.</p>
+    {% endif %}
+</section>
+
+<section class="discovery-grupo">
+    <h2>Requisitos ({{ entidades.requisitos|length }})</h2>
+    {% if entidades.requisitos %}
+    <ul class="discovery-entidad-list">
+        {% for e in entidades.requisitos %}
+        <li class="discovery-entidad">
+            {{ e.descripcion }}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ e.confianza.value }}</span>
+                {% if e.fuente_directa %}<span class="badge">respuesta #{{ e.fuente_directa.referencia }}</span>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguno.</p>
+    {% endif %}
+</section>
+
+<section class="discovery-grupo">
+    <h2>Restricciones ({{ entidades.restricciones|length }})</h2>
+    {% if entidades.restricciones %}
+    <ul class="discovery-entidad-list">
+        {% for e in entidades.restricciones %}
+        <li class="discovery-entidad">
+            {{ e.descripcion }}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ e.tipo }}</span>
+                {% if e.fuente_directa %}<span class="badge">respuesta #{{ e.fuente_directa.referencia }}</span>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguna.</p>
+    {% endif %}
+</section>
+
+<section class="discovery-grupo">
+    <h2>Datos ({{ entidades.datos|length }})</h2>
+    {% if entidades.datos %}
+    <ul class="discovery-entidad-list">
+        {% for e in entidades.datos %}
+        <li class="discovery-entidad">
+            {{ e.descripcion }}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ e.confianza.value }}</span>
+                {% if e.temporalidad %}<span class="badge">temporalidad: {{ e.temporalidad }}</span>{% endif %}
+                {% if e.sensibilidad %}<span class="badge">sensibilidad: {{ e.sensibilidad }}</span>{% endif %}
+                {% if e.fuente_directa %}<span class="badge">respuesta #{{ e.fuente_directa.referencia }}</span>{% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguno.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

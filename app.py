@@ -1,4 +1,7 @@
 # app.py
+import json
+import uuid
+
 from flask import Flask, render_template, request, redirect, url_for, session, abort, g
 from src import config
 from src.database import DBManager
@@ -10,6 +13,24 @@ from src.seguridad import (
 from src.observabilidad import (
     configurar_logging, set_correlation_id, reset_correlation_id,
 )
+# TF-0031 — UI de pruebas del Discovery nuevo. Solo consume APIs públicas ya
+# aprobadas (TF-0030); no importa src.orquestador ni src.proyectos.
+from src.ai.factory import crear_cliente
+from src.discovery.discovery import (
+    TIPO_ACCION_DISCOVERY, FormularioIncompleto, ejecutar_discovery,
+)
+from src.expediente.modelo import TipoPregunta
+from src.formulario.arbol import siguiente_pregunta
+from src.formulario.preguntas import PREGUNTAS
+from src.formulario.respuestas import (
+    RespuestaInvalida, deserializar_respuesta, serializar_respuesta, validar_respuesta,
+)
+from src.repositorios.acciones import COMPLETADA, RepositorioAcciones
+from src.repositorios.datos import RepositorioDatos
+from src.repositorios.perfiles import RepositorioPerfiles
+from src.repositorios.requisitos import RepositorioRequisitos
+from src.repositorios.respuestas_formulario import RepositorioRespuestasFormulario
+from src.repositorios.restricciones import RepositorioRestricciones
 
 # Inicialización de la aplicación Flask
 app = Flask(__name__)
@@ -169,6 +190,161 @@ def editar_tarea(tarea_id):
     }
     return render_template('formulario_tarea.html',
                            errores={}, valores=valores, **comun)
+
+
+# --- TF-0031: UI de pruebas del Discovery nuevo ---------------------------
+#
+# Flujo:
+#
+#   GET  /discovery/nuevo
+#        -> genera un `codigo` de prueba y redirige al formulario
+#   GET|POST /discovery/<codigo>/formulario
+#        -> recorre el árbol pregunta por pregunta (src.formulario.arbol),
+#           persiste cada respuesta vía RepositorioRespuestasFormulario;
+#           al terminar el árbol muestra el botón "Ejecutar Discovery"
+#   POST /discovery/<codigo>/ejecutar
+#        -> ejecutar_discovery(codigo, crear_cliente()); nunca muestra el
+#           resultado directamente — el estado de la corrida (éxito, fallo,
+#           avisos) ya queda persistido en `acciones` por TF-0030, así que
+#           /resultado es una vista de solo lectura sobre eso
+#   GET  /discovery/<codigo>/resultado
+#        -> Expediente Maestro generado (Perfiles/Requisitos/Restricciones/
+#           Datos), o el estado "todavía no ejecutado" / el error registrado
+#
+# Interfaz de pruebas funcional, no diseño visual definitivo. `codigo` no
+# tiene persistencia propia ni FK a nada: es solo el identificador de
+# agrupación que ya usan `respuestas_formulario` y las tablas del Expediente
+# Maestro (mismo criterio de acoplamiento flojo que el resto del repo).
+
+
+def _historial_formulario(respuestas):
+    """Lista `[{"pregunta_texto", "respuesta"}, ...]` legible para mostrar
+    lo ya respondido; deserializa las respuestas de selección múltiple en
+    vez de mostrar el JSON crudo almacenado."""
+    historial = []
+    for r in respuestas:
+        pregunta = PREGUNTAS.get(r.pregunta_id)
+        if pregunta is None:
+            texto_respuesta = r.respuesta
+        else:
+            valor = deserializar_respuesta(pregunta, r.respuesta)
+            texto_respuesta = ", ".join(valor) if isinstance(valor, list) else valor
+        historial.append({"pregunta_texto": r.pregunta_texto, "respuesta": texto_respuesta})
+    return historial
+
+
+@app.route('/discovery/nuevo')
+def discovery_nuevo():
+    """Genera un código de prueba nuevo y arranca el formulario."""
+    codigo = f"DISC-{uuid.uuid4().hex[:8]}"
+    return redirect(url_for('discovery_formulario', codigo=codigo))
+
+
+@app.route('/discovery/<codigo>/formulario', methods=['GET', 'POST'])
+def discovery_formulario(codigo):
+    """Recorre el árbol de decisión pregunta por pregunta (TF-0030,
+    `src.formulario.arbol.siguiente_pregunta`), sin interpretar ni
+    modificar su lógica: esta vista solo captura y persiste."""
+    repo_respuestas = RepositorioRespuestasFormulario()
+
+    if request.method == 'POST':
+        pregunta_id = request.form.get('pregunta_id', '')
+        pregunta = PREGUNTAS.get(pregunta_id)
+        if pregunta is None:
+            abort(400)
+
+        valor = (
+            request.form.getlist('respuesta') if pregunta.multiple
+            else request.form.get('respuesta', '')
+        )
+        try:
+            validar_respuesta(pregunta, valor)
+        except RespuestaInvalida as exc:
+            respuestas = repo_respuestas.listar(codigo)
+            return render_template(
+                'discovery_formulario.html', codigo=codigo, pregunta=pregunta,
+                es_texto_libre=pregunta.tipo_pregunta == TipoPregunta.TEXTO_LIBRE,
+                error=str(exc), valor_previo=valor,
+                historial=_historial_formulario(respuestas),
+            ), 400
+
+        texto = serializar_respuesta(pregunta, valor)
+        repo_respuestas.registrar(
+            codigo, pregunta.pregunta_id, pregunta.texto, pregunta.tipo_pregunta, texto,
+        )
+        # PRG: evita reenviar la misma respuesta si se refresca la página.
+        return redirect(url_for('discovery_formulario', codigo=codigo))
+
+    respuestas = repo_respuestas.listar(codigo)
+    pregunta = siguiente_pregunta(respuestas)
+    return render_template(
+        'discovery_formulario.html', codigo=codigo, pregunta=pregunta,
+        es_texto_libre=pregunta is not None and pregunta.tipo_pregunta == TipoPregunta.TEXTO_LIBRE,
+        error=None, valor_previo=None, historial=_historial_formulario(respuestas),
+    )
+
+
+@app.route('/discovery/<codigo>/ejecutar', methods=['POST'])
+def discovery_ejecutar(codigo):
+    """Dispara `ejecutar_discovery()` (TF-0030) y redirige al resultado.
+
+    No muestra el resultado ni el error aquí: `ejecutar_discovery` ya deja
+    todo lo necesario registrado en `acciones` (COMPLETADA o FALLIDA, con su
+    `error` si aplica) — `/resultado` es quien lo lee.
+    """
+    respuestas = RepositorioRespuestasFormulario().listar(codigo)
+    if siguiente_pregunta(respuestas) is not None:
+        return redirect(url_for('discovery_formulario', codigo=codigo))
+
+    try:
+        ejecutar_discovery(codigo, crear_cliente())
+    except FormularioIncompleto:
+        pass  # carrera improbable; /resultado reflejará "no ejecutado todavía"
+    except Exception:
+        pass  # ya quedó registrado como FALLIDA por ejecutar_discovery
+
+    return redirect(url_for('discovery_resultado', codigo=codigo))
+
+
+@app.route('/discovery/<codigo>/resultado')
+def discovery_resultado(codigo):
+    """Vista de solo lectura sobre lo ya persistido: no vuelve a ejecutar
+    Discovery ni guarda nada (`ejecutar_discovery` todavía no es idempotente
+    — sin botón de "volver a ejecutar" en esta primera versión, para no
+    invitar a duplicar entidades durante las pruebas)."""
+    respuestas = RepositorioRespuestasFormulario().listar(codigo)
+    if not respuestas:
+        abort(404)
+
+    completo = siguiente_pregunta(respuestas) is None
+
+    acciones_discovery = [
+        a for a in RepositorioAcciones().listar(ticket=codigo)
+        if a['tipo'] == TIPO_ACCION_DISCOVERY
+    ]
+    ultima_accion = acciones_discovery[-1] if acciones_discovery else None
+    ejecutado = ultima_accion is not None
+    fallido = ejecutado and ultima_accion['estado'] != COMPLETADA
+    resultado_accion = (
+        json.loads(ultima_accion['resultado'])
+        if ejecutado and ultima_accion['resultado'] else {}
+    )
+
+    entidades = None
+    if ejecutado and not fallido:
+        entidades = {
+            'perfiles': RepositorioPerfiles().listar(codigo),
+            'requisitos': RepositorioRequisitos().listar(codigo),
+            'restricciones': RepositorioRestricciones().listar(codigo),
+            'datos': RepositorioDatos().listar(codigo),
+        }
+
+    return render_template(
+        'discovery_resultado.html', codigo=codigo, completo=completo,
+        ejecutado=ejecutado, fallido=fallido,
+        error=resultado_accion.get('error'), problemas=resultado_accion.get('problemas', []),
+        entidades=entidades,
+    )
 
 
 if __name__ == '__main__':

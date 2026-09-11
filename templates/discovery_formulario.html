@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Discovery de prueba · Taskflow{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <h1>Discovery — {{ codigo }}</h1>
+    <a class="btn" href="{{ url_for('discovery_nuevo') }}">Nueva corrida</a>
+</section>
+
+{% if historial %}
+<section class="discovery-historial">
+    <h2>Respuestas hasta ahora</h2>
+    <ul class="discovery-historial__list">
+        {% for item in historial %}
+        <li><strong>{{ item.pregunta_texto }}</strong><br>{{ item.respuesta }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if pregunta %}
+<section class="discovery-pregunta">
+    {% if error %}
+    <p class="form-error-summary" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <form class="form" method="POST" action="{{ url_for('discovery_formulario', codigo=codigo) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="pregunta_id" value="{{ pregunta.pregunta_id }}">
+
+        <div class="form-field">
+            <label>{{ pregunta.texto }}</label>
+
+            {% if es_texto_libre %}
+            <textarea name="respuesta" rows="3"
+                {% if pregunta.obligatoria %}required{% endif %}>{{ valor_previo or '' }}</textarea>
+
+            {% elif pregunta.multiple %}
+            {% for opcion in pregunta.opciones %}
+            <label class="discovery-opcion">
+                <input type="checkbox" name="respuesta" value="{{ opcion }}"
+                    {% if valor_previo and opcion in valor_previo %}checked{% endif %}>
+                {{ opcion }}
+            </label>
+            {% endfor %}
+
+            {% else %}
+            {% for opcion in pregunta.opciones %}
+            <label class="discovery-opcion">
+                <input type="radio" name="respuesta" value="{{ opcion }}"
+                    {% if valor_previo == opcion %}checked{% endif %}
+                    {% if pregunta.obligatoria %}required{% endif %}>
+                {{ opcion }}
+            </label>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Continuar</button>
+        </div>
+    </form>
+</section>
+{% else %}
+<section class="discovery-completo">
+    <p>El formulario está completo.</p>
+    <form method="POST" action="{{ url_for('discovery_ejecutar', codigo=codigo) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-primary">Ejecutar Discovery</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}
