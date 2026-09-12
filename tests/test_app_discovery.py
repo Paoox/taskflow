@@ -263,6 +263,80 @@ class TestDiscoveryEjecutarErrores:
         assert resp.headers["Location"].endswith(f"/discovery/{codigo}/resultado")
 
 
+class TestReaperturaEnLaUI:
+    """TF-0032 — `_PASOS` ya contiene el caso real auditado
+    (monetizacion=Sí + dato_recordar=No): ejecutar Discovery sobre un
+    recorrido completo de la UI dispara la contradicción real y la reapertura
+    correspondiente, sin que `procesar_reapertura()` vuelva a tocar el
+    formulario completo."""
+
+    def test_formulario_muestra_la_pregunta_reactivada_tras_ejecutar(self, client, csrf_token):
+        codigo = "DISC-r0000001"
+        _completar_formulario(client, csrf_token, codigo)
+        client.post(f"/discovery/{codigo}/ejecutar", data={"csrf_token": csrf_token})
+
+        resp = client.get(f"/discovery/{codigo}/formulario")
+        assert resp.status_code == 200
+        assert b"dato_recordar" in resp.data
+        assert "Discovery encontró algo que aclarar".encode("utf-8") in resp.data
+        assert b"Ejecutar Discovery" not in resp.data  # ya no es "formulario completo"
+
+    def test_responder_la_reapertura_la_resuelve(self, client, csrf_token):
+        """Al cambiar dato_recordar a "Sí", el propio árbol (sin tocarlo)
+        vuelve a pedir dato_recordar_detalle — nunca vuelve a mostrar
+        "Ejecutar Discovery" hasta responder eso también. La reapertura en
+        sí queda resuelta de inmediato, independiente de esa continuación."""
+        codigo = "DISC-r0000002"
+        _completar_formulario(client, csrf_token, codigo)
+        client.post(f"/discovery/{codigo}/ejecutar", data={"csrf_token": csrf_token})
+
+        resp = client.post(
+            f"/discovery/{codigo}/formulario",
+            data={"csrf_token": csrf_token, "pregunta_id": "dato_recordar", "respuesta": "Sí"},
+        )
+        assert resp.status_code == 302
+
+        from src.repositorios.contradicciones import RepositorioContradicciones
+        from src.expediente.modelo import EstadoContradiccion
+        contradicciones = RepositorioContradicciones().listar(codigo)
+        assert contradicciones[0].estado == EstadoContradiccion.RESUELTA
+
+        # El árbol (intacto) ahora sí requiere dato_recordar_detalle, porque
+        # dato_recordar ya no es "No" — comportamiento correcto y esperado
+        # de src.formulario.arbol, no un efecto de la reapertura en sí.
+        siguiente = client.get(f"/discovery/{codigo}/formulario")
+        assert b"dato_recordar_detalle" in siguiente.data
+
+    def test_resultado_muestra_la_contradiccion_y_el_estado(self, client, csrf_token):
+        codigo = "DISC-r0000003"
+        _completar_formulario(client, csrf_token, codigo)
+        client.post(f"/discovery/{codigo}/ejecutar", data={"csrf_token": csrf_token})
+
+        resp = client.get(f"/discovery/{codigo}/resultado")
+        assert resp.status_code == 200
+        assert b"Contradicciones" in resp.data
+        assert b"datos.existencia_de_dato" in resp.data
+        assert b"requiere_aclaracion" in resp.data
+
+
+class TestReaperturaPorGapEnLaUI:
+    """El Gap-hallazgo (vía LLM) no ocurre con el ClienteEco por defecto de
+    los demás tests — se crea directo por repositorio para ejercitar la
+    rama de Gap (no Contradiccion) de `_reapertura_pendiente`."""
+
+    def test_gap_abierto_con_pregunta_resoluble_se_muestra_en_el_formulario(self, client, csrf_token):
+        from src.repositorios.gaps import RepositorioGaps
+
+        codigo = "DISC-r0000004"
+        _completar_formulario(client, csrf_token, codigo)
+        RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
+
+        resp = client.get(f"/discovery/{codigo}/formulario")
+        assert resp.status_code == 200
+        assert b"dato_recordar_detalle" in resp.data
+        assert "Discovery encontró algo que aclarar".encode("utf-8") in resp.data
+
+
 class TestHistorialConPreguntaDesconocida:
     def test_fila_con_pregunta_id_ajena_al_catalogo_no_rompe_el_historial(self, client, csrf_token):
         """Defensivo: una fila de `respuestas_formulario` con un

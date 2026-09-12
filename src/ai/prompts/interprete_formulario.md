@@ -39,7 +39,7 @@ RESPUESTAS_DEL_FORMULARIO>>>
 
 ## 3. TIPOS DE ENTIDAD
 
-Propone únicamente entidades de estos cuatro tipos:
+Propone únicamente entidades de estos cinco tipos:
 
 - **perfil** — un tipo de persona que usa o administra el proyecto.
   Campos: `nombre` (corto), `descripcion`.
@@ -52,6 +52,14 @@ Propone únicamente entidades de estos cuatro tipos:
 - **dato** — información que el sistema debe manejar o recordar.
   Campos: `descripcion`, y opcionalmente `temporalidad`, `sensibilidad`
   (usa `null` si no aplica o no se puede saber).
+- **hallazgo** — no es una entidad del Expediente: es una señal de que una
+  respuesta parece indicar un vacío o una ambigüedad en un dominio+etiqueta
+  del catálogo, no una afirmación fundamentada para persistir directamente.
+  Campos: `dominio` y `etiqueta` (deben ser exactamente uno de los pares
+  listados en "Dominios y etiquetas activos para esta corrida", al final de
+  las RESPUESTAS DEL FORMULARIO — nunca inventes un dominio o etiqueta que
+  no aparezca ahí), `motivo` (por qué esa respuesta señala el vacío o la
+  ambigüedad).
 
 No propongas ningún otro tipo de entidad, aunque se te ocurra que podría ser
 útil (por ejemplo, no propongas capacidades técnicas, funcionalidades
@@ -94,6 +102,7 @@ tiene fundamento suficiente, no escribas ninguna línea.
 {"tipo": "requisito", "respuesta_id": 18, "descripcion": "Una persona debe poder registrar un pedido nuevo"}
 {"tipo": "restriccion", "respuesta_id": 24, "tipo_restriccion": "tecnica", "descripcion": "Ya usan Google Sheets y prefieren reutilizarlo si es posible"}
 {"tipo": "dato", "respuesta_id": 20, "descripcion": "Historial de pedidos de cada cliente", "temporalidad": "permanente", "sensibilidad": null}
+{"tipo": "hallazgo", "respuesta_id": 22, "dominio": "datos", "etiqueta": "sensibilidad", "motivo": "La persona mencionó un dato que se guarda pero no quedó claro si es sensible"}
 
 Estas líneas ilustran únicamente la **forma** de la salida. No reutilices sus
 valores, tipos ni `respuesta_id`: cada uno lo decides exclusivamente a
@@ -109,8 +118,8 @@ No hagas ninguna de estas cosas:
   `entidades` con la lista dentro).
 - Una línea sin `respuesta_id`, o con un `respuesta_id` que no aparece en la
   sección 2.
-- Una entidad de un tipo que no sea `perfil`, `requisito`, `restriccion` o
-  `dato` (por ejemplo `capacidad` o `funcionalidad`).
+- Una entidad de un tipo que no sea `perfil`, `requisito`, `restriccion`,
+  `dato` o `hallazgo` (por ejemplo `capacidad` o `funcionalidad`).
 - Un bloque de código Markdown alrededor de la salida (```json ... ```).
 - Inventar una entidad a partir de una respuesta "no sé", vacía o que no
   declara nada concreto.

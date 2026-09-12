@@ -107,6 +107,31 @@ class RepositorioContradicciones:
         conexion.close()
         return [_fila_a_contradiccion(f) for f in filas]
 
+    def agregar_afirmacion(self, contradiccion_id: int, afirmacion: dict, *, conn=None) -> bool:
+        """TF-0032 — Añade una afirmación más a una `Contradiccion` ya
+        existente (ej. la respuesta nueva de una reapertura, la resuelva o
+        no) sin sustituir las ya registradas — conserva toda la evidencia
+        del proceso, no solo el estado final. Devuelve `True` si el `id`
+        existía."""
+        actual = self.obtener(contradiccion_id)
+        if actual is None:
+            return False
+        nuevas = actual.afirmaciones + [afirmacion]
+        conexion = conn or get_connection()
+        try:
+            cursor = conexion.cursor()
+            cursor.execute(
+                "UPDATE contradicciones SET afirmaciones = ? WHERE id = ?",
+                (json.dumps(nuevas, ensure_ascii=False), contradiccion_id),
+            )
+            afectadas = cursor.rowcount
+            if conn is None:
+                conexion.commit()
+            return afectadas > 0
+        finally:
+            if conn is None:
+                conexion.close()
+
     def resolver(
         self, contradiccion_id: int, resolucion_valor: str, resolucion_accion_id: int,
         *, conn=None,

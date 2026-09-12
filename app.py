@@ -15,18 +15,23 @@ from src.observabilidad import (
 )
 # TF-0031 — UI de pruebas del Discovery nuevo. Solo consume APIs públicas ya
 # aprobadas (TF-0030); no importa src.orquestador ni src.proyectos.
+# TF-0032 añade la reapertura de preguntas cuando Gap/Contradiccion quedan
+# ABIERTO/ABIERTA con un pregunta_id resoluble (A1/A4).
 from src.ai.factory import crear_cliente
+from src.discovery.catalogo_dominios import resolver_pregunta
 from src.discovery.discovery import (
-    TIPO_ACCION_DISCOVERY, FormularioIncompleto, ejecutar_discovery,
+    TIPO_ACCION_DISCOVERY, FormularioIncompleto, ejecutar_discovery, procesar_reapertura,
 )
-from src.expediente.modelo import TipoPregunta
+from src.expediente.modelo import EstadoContradiccion, EstadoGap, TipoPregunta
 from src.formulario.arbol import siguiente_pregunta
 from src.formulario.preguntas import PREGUNTAS
 from src.formulario.respuestas import (
     RespuestaInvalida, deserializar_respuesta, serializar_respuesta, validar_respuesta,
 )
 from src.repositorios.acciones import COMPLETADA, RepositorioAcciones
+from src.repositorios.contradicciones import RepositorioContradicciones
 from src.repositorios.datos import RepositorioDatos
+from src.repositorios.gaps import RepositorioGaps
 from src.repositorios.perfiles import RepositorioPerfiles
 from src.repositorios.requisitos import RepositorioRequisitos
 from src.repositorios.respuestas_formulario import RepositorioRespuestasFormulario
@@ -233,6 +238,26 @@ def _historial_formulario(respuestas):
     return historial
 
 
+def _reapertura_pendiente(codigo):
+    """TF-0032 — primer Gap/Contradiccion ABIERTO/ABIERTA de `codigo` con un
+    `pregunta_id` resoluble (A1), o `None`. Gaps antes que Contradicciones,
+    ambos por `id` ascendente — orden simple y determinista, no hay
+    prioridad declarada entre hallazgos."""
+    for gap in RepositorioGaps().listar(codigo):
+        if gap.estado == EstadoGap.ABIERTO:
+            dominio, _, etiqueta = gap.campo_o_concepto.partition(".")
+            pregunta_id = resolver_pregunta(dominio, etiqueta)
+            if pregunta_id is not None:
+                return ("gap", gap.id, pregunta_id)
+    for contradiccion in RepositorioContradicciones().listar(codigo):
+        if contradiccion.estado == EstadoContradiccion.ABIERTA:
+            dominio, _, etiqueta = contradiccion.concepto.partition(".")
+            pregunta_id = resolver_pregunta(dominio, etiqueta)
+            if pregunta_id is not None:
+                return ("contradiccion", contradiccion.id, pregunta_id)
+    return None
+
+
 @app.route('/discovery/nuevo')
 def discovery_nuevo():
     """Genera un código de prueba nuevo y arranca el formulario."""
@@ -272,15 +297,35 @@ def discovery_formulario(codigo):
         repo_respuestas.registrar(
             codigo, pregunta.pregunta_id, pregunta.texto, pregunta.tipo_pregunta, texto,
         )
+
+        # TF-0032 — si esta era la pregunta de una reapertura pendiente,
+        # resolverla ahora (nunca reprocesa el formulario completo).
+        reapertura = _reapertura_pendiente(codigo)
+        if reapertura is not None and reapertura[2] == pregunta.pregunta_id:
+            tipo_hallazgo, hallazgo_id, _ = reapertura
+            procesar_reapertura(codigo, tipo_hallazgo, hallazgo_id, crear_cliente())
+
         # PRG: evita reenviar la misma respuesta si se refresca la página.
         return redirect(url_for('discovery_formulario', codigo=codigo))
 
     respuestas = repo_respuestas.listar(codigo)
+    reapertura = _reapertura_pendiente(codigo)
+    if reapertura is not None:
+        _, _, pregunta_id_reapertura = reapertura
+        pregunta = PREGUNTAS[pregunta_id_reapertura]
+        return render_template(
+            'discovery_formulario.html', codigo=codigo, pregunta=pregunta,
+            es_texto_libre=pregunta.tipo_pregunta == TipoPregunta.TEXTO_LIBRE,
+            error=None, valor_previo=None, historial=_historial_formulario(respuestas),
+            reapertura=True,
+        )
+
     pregunta = siguiente_pregunta(respuestas)
     return render_template(
         'discovery_formulario.html', codigo=codigo, pregunta=pregunta,
         es_texto_libre=pregunta is not None and pregunta.tipo_pregunta == TipoPregunta.TEXTO_LIBRE,
         error=None, valor_previo=None, historial=_historial_formulario(respuestas),
+        reapertura=False,
     )
 
 
@@ -331,6 +376,8 @@ def discovery_resultado(codigo):
     )
 
     entidades = None
+    gaps = []
+    contradicciones = []
     if ejecutado and not fallido:
         entidades = {
             'perfiles': RepositorioPerfiles().listar(codigo),
@@ -338,12 +385,16 @@ def discovery_resultado(codigo):
             'restricciones': RepositorioRestricciones().listar(codigo),
             'datos': RepositorioDatos().listar(codigo),
         }
+        # TF-0032 — Gap/Contradiccion de esta corrida (A4).
+        gaps = RepositorioGaps().listar(codigo)
+        contradicciones = RepositorioContradicciones().listar(codigo)
 
     return render_template(
         'discovery_resultado.html', codigo=codigo, completo=completo,
         ejecutado=ejecutado, fallido=fallido,
         error=resultado_accion.get('error'), problemas=resultado_accion.get('problemas', []),
-        entidades=entidades,
+        estado_discovery=resultado_accion.get('estado'),
+        entidades=entidades, gaps=gaps, contradicciones=contradicciones,
     )
 
 

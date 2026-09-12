@@ -70,3 +70,24 @@ class TestListar:
         repo.crear("PROY-001", "requisito", "a", _AFIRMACIONES)
         repo.crear("PROY-002", "requisito", "b", _AFIRMACIONES)
         assert len(repo.listar("PROY-001")) == 1
+
+
+class TestAgregarAfirmacion:
+    """TF-0032 — usado por `procesar_reapertura()` para conservar la
+    respuesta nueva como evidencia, la resuelva o no, sin sustituir las
+    afirmaciones originales."""
+
+    def test_agrega_sin_sustituir_las_originales(self, repo):
+        c = repo.crear("PROY-001", "requisito", "x", _AFIRMACIONES)
+        nueva = {"valor": "suscripcion mensual", "origen": "respuesta_formulario#9"}
+        assert repo.agregar_afirmacion(c.id, nueva) is True
+        recargado = repo.obtener(c.id)
+        assert recargado.afirmaciones == _AFIRMACIONES + [nueva]
+
+    def test_no_cambia_el_estado(self, repo):
+        c = repo.crear("PROY-001", "requisito", "x", _AFIRMACIONES)
+        repo.agregar_afirmacion(c.id, {"valor": "x", "origen": "y"})
+        assert repo.obtener(c.id).estado == EstadoContradiccion.ABIERTA
+
+    def test_inexistente_devuelve_false(self, repo):
+        assert repo.agregar_afirmacion(999, {"valor": "x", "origen": "y"}) is False

@@ -21,6 +21,9 @@
 
 {% if pregunta %}
 <section class="discovery-pregunta">
+    {% if reapertura %}
+    <p class="discovery-reapertura-aviso">Discovery encontró algo que aclarar con una respuesta anterior — por eso esta pregunta volvió a aparecer.</p>
+    {% endif %}
     {% if error %}
     <p class="form-error-summary" role="alert">{{ error }}</p>
     {% endif %}

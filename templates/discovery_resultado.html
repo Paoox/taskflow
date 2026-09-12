@@ -24,6 +24,10 @@
 <p class="form-error-summary" role="alert">Discovery falló: {{ error }}</p>
 {% endif %}
 
+{% if estado_discovery %}
+<p class="discovery-estado"><span class="badge">{{ estado_discovery }}</span></p>
+{% endif %}
+
 {% if problemas %}
 <section class="discovery-avisos">
     <h2>Avisos de esta corrida</h2>
@@ -111,6 +115,49 @@
     </ul>
     {% else %}
     <p class="empty-state">Ninguno.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if gaps or contradicciones %}
+<section class="discovery-grupo">
+    <h2>Gaps ({{ gaps|length }})</h2>
+    {% if gaps %}
+    <ul class="discovery-entidad-list">
+        {% for g in gaps %}
+        <li class="discovery-entidad">
+            {{ g.campo_o_concepto }}{% if g.motivo %} — {{ g.motivo }}{% endif %}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ g.estado.value }}</span>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguno.</p>
+    {% endif %}
+</section>
+
+<section class="discovery-grupo">
+    <h2>Contradicciones ({{ contradicciones|length }})</h2>
+    {% if contradicciones %}
+    <ul class="discovery-entidad-list">
+        {% for c in contradicciones %}
+        <li class="discovery-entidad">
+            {{ c.concepto }}
+            <div class="discovery-entidad__meta">
+                <span class="badge">{{ c.estado.value }}</span>
+            </div>
+            <ul>
+                {% for afirmacion in c.afirmaciones %}
+                <li>{{ afirmacion.valor }} ({{ afirmacion.origen }})</li>
+                {% endfor %}
+            </ul>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">Ninguna.</p>
     {% endif %}
 </section>
 {% endif %}

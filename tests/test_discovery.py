@@ -12,17 +12,22 @@ import pytest
 
 from src import database
 from src.discovery.discovery import (
+    EstadoDiscovery,
     FormularioIncompleto,
     ResultadoDiscovery,
     ejecutar_discovery,
 )
 from src.ai.cliente import RespuestaIA
-from src.expediente.modelo import FuenteDirecta, NaturalezaInformacion
+from src.expediente.modelo import (
+    EstadoContradiccion, EstadoGap, FuenteDirecta, NaturalezaInformacion,
+)
 from src.formulario.preguntas import PREGUNTAS
 from src.formulario.respuestas import serializar_respuesta
 from src.proyectos.estado import NivelConfianza, OrigenDato
 from src.repositorios.acciones import FALLIDA, RepositorioAcciones
+from src.repositorios.contradicciones import RepositorioContradicciones
 from src.repositorios.datos import RepositorioDatos
+from src.repositorios.gaps import RepositorioGaps
 from src.repositorios.perfiles import RepositorioPerfiles
 from src.repositorios.requisitos import RepositorioRequisitos
 from src.repositorios.respuestas_formulario import RepositorioRespuestasFormulario
@@ -366,3 +371,201 @@ class TestNuncaEscribeProjectState:
         assert not any(m.startswith("src.app") for m in modulos_importados)
         assert "src.repositorios.expedientes" not in modulos_importados
         assert "src.repositorios.expedientes.RepositorioExpedientes" not in modulos_importados
+
+
+# --- TF-0032: reglas de consecuencia + Gap/Contradiccion + EstadoDiscovery --
+
+# _PASOS ya contiene el caso real auditado (monetizacion=Sí + dato_recordar=No):
+# toda corrida con _completar_formulario() dispara la contradicción real.
+_PASOS_SIN_CONTRADICCION = []
+for _pid, _val in _PASOS:
+    if _pid == "dato_recordar":
+        _PASOS_SIN_CONTRADICCION.append((_pid, "Sí"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_recordar_detalle", "El historial de pedidos de cada cliente"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_recordar_detalle_continuar", "No"))
+    else:
+        _PASOS_SIN_CONTRADICCION.append((_pid, _val))
+
+
+def _completar_formulario_sin_contradiccion(codigo: str) -> dict:
+    repo = RepositorioRespuestasFormulario()
+    filas = {}
+    for pregunta_id, valor in _PASOS_SIN_CONTRADICCION:
+        filas[pregunta_id] = _registrar(codigo, pregunta_id, valor, repo)
+    return filas
+
+
+class TestReglasConsecuenciaWiring:
+    def test_contradiccion_real_queda_registrada(self, db):
+        _completar_formulario("PROY-016")
+        ejecutar_discovery("PROY-016", _ClienteFalso(""))
+        contradicciones = RepositorioContradicciones().listar("PROY-016")
+        assert len(contradicciones) == 1
+        assert contradicciones[0].estado == EstadoContradiccion.ABIERTA
+        assert contradicciones[0].concepto == "datos.existencia_de_dato"
+        assert len(contradicciones[0].afirmaciones) == 2
+
+    def test_no_se_duplica_si_ya_existe_para_el_mismo_concepto(self, db):
+        """Idempotencia (A3): `_persistir_hallazgo_determinista` no crea un
+        segundo registro para el mismo `codigo` + `concepto`."""
+        from src.discovery import reglas_consecuencia
+        from src.discovery.discovery import _persistir_hallazgo_determinista
+        from src.repositorios.lote_descubrimiento import LoteDescubrimiento
+
+        _completar_formulario("PROY-016B")
+        respuestas = RepositorioRespuestasFormulario().listar("PROY-016B")
+        hallazgo = reglas_consecuencia.evaluar_reglas("PROY-016B", respuestas)[0]
+        repo_gap, repo_contra = RepositorioGaps(), RepositorioContradicciones()
+
+        for _ in range(2):
+            with LoteDescubrimiento() as lote:
+                _persistir_hallazgo_determinista(
+                    hallazgo, codigo="PROY-016B", conexion=lote.conexion,
+                    repo_gaps=repo_gap, repo_contradicciones=repo_contra,
+                )
+        assert len(repo_contra.listar("PROY-016B")) == 1
+
+
+class TestEstadoDiscovery:
+    def test_requiere_aclaracion_si_hay_contradiccion_abierta(self, db):
+        _completar_formulario("PROY-017")
+        resultado = ejecutar_discovery("PROY-017", _ClienteFalso(""))
+        assert resultado.estado == EstadoDiscovery.REQUIERE_ACLARACION
+
+    def test_completo_sin_contradiccion_ni_gap(self, db):
+        _completar_formulario_sin_contradiccion("PROY-018")
+        resultado = ejecutar_discovery("PROY-018", _ClienteFalso(""))
+        assert resultado.estado == EstadoDiscovery.COMPLETO
+        assert RepositorioContradicciones().listar("PROY-018") == []
+
+    def test_estado_se_guarda_en_el_resultado_de_la_accion(self, db):
+        _completar_formulario("PROY-018B")
+        repo_acc = RepositorioAcciones()
+        ejecutar_discovery("PROY-018B", _ClienteFalso(""), repo_acciones=repo_acc)
+        accion = next(a for a in repo_acc.listar(ticket="PROY-018B") if a["tipo"] == "discovery_formulario")
+        assert json.loads(accion["resultado"])["estado"] == "requiere_aclaracion"
+
+
+class TestHallazgoLLMSePersisteComoGap:
+    def test_hallazgo_valido_crea_un_gap(self, db):
+        filas = _completar_formulario("PROY-019")
+        cliente = _ClienteFalso(_linea(
+            tipo="hallazgo", respuesta_id=filas["problema_objetivo"].id,
+            dominio="datos", etiqueta="sensibilidad",
+            motivo="No queda claro si el historial incluye datos de pago.",
+        ))
+        ejecutar_discovery("PROY-019", cliente)
+        gaps = RepositorioGaps().listar("PROY-019")
+        assert any(g.campo_o_concepto == "datos.sensibilidad" for g in gaps)
+        assert all(g.estado == EstadoGap.ABIERTO for g in gaps)
+
+    def test_hallazgo_del_llm_nunca_se_persiste_como_contradiccion(self, db):
+        filas = _completar_formulario("PROY-020")
+        cliente = _ClienteFalso(_linea(
+            tipo="hallazgo", respuesta_id=filas["problema_objetivo"].id,
+            dominio="funcionalidad", etiqueta="funcionalidad_faltante", motivo="x",
+        ))
+        ejecutar_discovery("PROY-020", cliente)
+        contradicciones = RepositorioContradicciones().listar("PROY-020")
+        assert all(c.concepto != "funcionalidad.funcionalidad_faltante" for c in contradicciones)
+
+
+class TestHelpersInternos:
+    """Cobertura directa de las funciones privadas que no se alcanzan con
+    un escenario real completo (solo 1 regla implementada hoy)."""
+
+    def test_calcular_estado_en_progreso_si_falta_una_pregunta(self, db):
+        from src.discovery.discovery import _calcular_estado
+        respuestas = RepositorioRespuestasFormulario().listar("PROY-VACIO-ESTADO")
+        estado = _calcular_estado(respuestas, "PROY-VACIO-ESTADO", RepositorioGaps(), RepositorioContradicciones())
+        assert estado == EstadoDiscovery.EN_PROGRESO
+
+    def test_calcular_estado_requiere_aclaracion_por_gap_abierto(self, db):
+        from src.discovery.discovery import _calcular_estado
+        _completar_formulario_sin_contradiccion("PROY-ESTADO-GAP")
+        RepositorioGaps().crear("PROY-ESTADO-GAP", "respuesta_formulario", "datos.sensibilidad", motivo="x")
+        respuestas = RepositorioRespuestasFormulario().listar("PROY-ESTADO-GAP")
+        estado = _calcular_estado(respuestas, "PROY-ESTADO-GAP", RepositorioGaps(), RepositorioContradicciones())
+        assert estado == EstadoDiscovery.REQUIERE_ACLARACION
+
+    def test_calcular_estado_completo_con_pendientes_por_gap_documentado(self, db):
+        from src.discovery.discovery import _calcular_estado
+        _completar_formulario_sin_contradiccion("PROY-ESTADO-PEND")
+        gap = RepositorioGaps().crear("PROY-ESTADO-PEND", "respuesta_formulario", "datos.sensibilidad", motivo="x")
+        RepositorioGaps().marcar_estado(gap.id, EstadoGap.DOCUMENTADO_NO_BLOQUEANTE)
+        respuestas = RepositorioRespuestasFormulario().listar("PROY-ESTADO-PEND")
+        estado = _calcular_estado(respuestas, "PROY-ESTADO-PEND", RepositorioGaps(), RepositorioContradicciones())
+        assert estado == EstadoDiscovery.COMPLETO_CON_PENDIENTES
+
+    def test_persistir_hallazgo_determinista_tipo_gap(self, db):
+        from src.discovery.discovery import _persistir_hallazgo_determinista
+        from src.discovery.reglas_consecuencia import HallazgoConsecuencia
+        from src.repositorios.lote_descubrimiento import LoteDescubrimiento
+
+        hallazgo = HallazgoConsecuencia(
+            tipo="gap", dominio="datos", etiqueta="sensibilidad",
+            respuestas_relacionadas=[1], motivo="x",
+        )
+        with LoteDescubrimiento() as lote:
+            _persistir_hallazgo_determinista(
+                hallazgo, codigo="PROY-GAP-DET", conexion=lote.conexion,
+                repo_gaps=RepositorioGaps(), repo_contradicciones=RepositorioContradicciones(),
+            )
+        gaps = RepositorioGaps().listar("PROY-GAP-DET")
+        assert len(gaps) == 1 and gaps[0].campo_o_concepto == "datos.sensibilidad"
+
+    def test_persistir_hallazgo_determinista_tipo_gap_es_idempotente(self, db):
+        from src.discovery.discovery import _persistir_hallazgo_determinista
+        from src.discovery.reglas_consecuencia import HallazgoConsecuencia
+        from src.repositorios.lote_descubrimiento import LoteDescubrimiento
+
+        hallazgo = HallazgoConsecuencia(
+            tipo="gap", dominio="datos", etiqueta="sensibilidad",
+            respuestas_relacionadas=[1], motivo="x",
+        )
+        for _ in range(2):
+            with LoteDescubrimiento() as lote:
+                _persistir_hallazgo_determinista(
+                    hallazgo, codigo="PROY-GAP-DET-IDEMP", conexion=lote.conexion,
+                    repo_gaps=RepositorioGaps(), repo_contradicciones=RepositorioContradicciones(),
+                )
+        assert len(RepositorioGaps().listar("PROY-GAP-DET-IDEMP")) == 1
+
+    def test_persistir_hallazgo_llm_es_idempotente(self, db):
+        from src.discovery.discovery import _persistir_hallazgo_llm
+        from src.discovery.interpretacion_llm import HallazgoLLM
+        from src.repositorios.lote_descubrimiento import LoteDescubrimiento
+
+        hallazgo = HallazgoLLM(dominio="datos", etiqueta="sensibilidad", motivo="x", respuesta_id=1)
+        for _ in range(2):
+            with LoteDescubrimiento() as lote:
+                _persistir_hallazgo_llm(hallazgo, codigo="PROY-GAP-LLM", conexion=lote.conexion, repo_gaps=RepositorioGaps())
+        assert len(RepositorioGaps().listar("PROY-GAP-LLM")) == 1
+
+    def test_profundidad_alcanzada(self, db):
+        from src.discovery.discovery import _profundidad_alcanzada
+        from src.discovery.reglas_consecuencia import LIMITE_PROFUNDIDAD_CADENA
+        repo_gaps = RepositorioGaps()
+        for i in range(LIMITE_PROFUNDIDAD_CADENA):
+            repo_gaps.crear("PROY-PROFUNDIDAD", "respuesta_formulario", f"datos.etiqueta{i}", motivo="x")
+        assert _profundidad_alcanzada("PROY-PROFUNDIDAD", repo_gaps, RepositorioContradicciones()) is True
+        assert _profundidad_alcanzada("PROY-OTRO", repo_gaps, RepositorioContradicciones()) is False
+
+
+class TestAtomicidadIncluyeHallazgos:
+    def test_fallo_en_la_escritura_tambien_revierte_los_hallazgos(self, db, monkeypatch):
+        filas = _completar_formulario("PROY-021")
+        cliente = _ClienteFalso(_linea(
+            tipo="dato", respuesta_id=filas["problema_objetivo"].id,
+            descripcion="x", temporalidad=None, sensibilidad=None,
+        ))
+        monkeypatch.setattr(RepositorioDatos, "crear", _falla_persistencia)
+
+        with pytest.raises(RuntimeError):
+            ejecutar_discovery("PROY-021", cliente)
+
+        # La contradicción real (monetizacion/datos) se intenta ANTES que el
+        # Dato roto (los hallazgos se persisten después de las entidades,
+        # en el mismo lote) — debe revertirse igual que las entidades.
+        assert RepositorioContradicciones().listar("PROY-021") == []
+        assert RepositorioRequisitos().listar("PROY-021") == []

@@ -27,18 +27,45 @@ el contexto (ver `construir_contexto`); cualquier línea cuyo `respuesta_id`
 no aparezca en ese conjunto se descarta como información no fundamentada en
 lo que la persona declaró (regla 18 del ticket TF-0030: "no inventar") —
 nunca se persiste.
+
+TF-0032 (A1/A4) añade un 5º tipo de línea, `"hallazgo"` — Qwen señala un
+posible gap/ambigüedad en un `dominio`+`etiqueta` (el vocabulario cerrado de
+`src.discovery.catalogo_dominios`, nunca el catálogo de preguntas en sí):
+
+    {"tipo": "hallazgo", "respuesta_id": 23, "dominio": "datos", "etiqueta": "sensibilidad", "motivo": "..."}
+
+El contexto que ve Qwen ahora también incluye, al final, los dominios y
+etiquetas activos de esta corrida (`catalogo_dominios.dominios_activos`) —
+Qwen nunca ve el catálogo completo de preguntas, solo esos nombres.
 """
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
+from src.discovery.catalogo_dominios import dominios_activos
 from src.discovery.interpretacion_directa import EntidadPropuesta
 from src.expediente.modelo import RespuestaFormulario, TipoPregunta
 from src.formulario.preguntas import PREGUNTAS
 from src.formulario.respuestas import deserializar_respuesta
 from src.proyectos.estado import NivelConfianza
 
-__all__ = ["construir_contexto", "parsear_entidades"]
+__all__ = ["HallazgoLLM", "construir_contexto", "parsear_entidades"]
+
+
+@dataclass
+class HallazgoLLM:
+    """Un hallazgo (gap/ambigüedad) que Qwen señaló sobre una respuesta de
+    texto libre — nunca una contradicción (comparar dos respuestas ya
+    conocidas es trabajo determinista, ver `src.discovery.reglas_consecuencia`).
+    Todavía sin resolver a `pregunta_id`: eso lo hace
+    `src.discovery.catalogo_dominios.resolver_pregunta`, código puro, nunca
+    Qwen."""
+
+    dominio: str
+    etiqueta: str
+    motivo: str
+    respuesta_id: int
 
 # Preguntas que `interpretacion_directa.py` ya consume de forma determinista:
 # no deben duplicarse aquí como contexto para el LLM.
@@ -62,13 +89,14 @@ _DIRECTA_SIN_LLM = frozenset({"nombre_proyecto"})
 
 _EXCLUIDAS_DEL_CONTEXTO = _YA_DETERMINISTAS | _CONTROL_DE_FLUJO | _SOLO_COMPUERTA | _DIRECTA_SIN_LLM
 
-_TIPOS_VALIDOS = frozenset({"perfil", "requisito", "restriccion", "dato"})
+_TIPOS_VALIDOS = frozenset({"perfil", "requisito", "restriccion", "dato", "hallazgo"})
 # Claves de texto obligatorias por tipo, además de "tipo" y "respuesta_id".
 _CAMPOS_REQUERIDOS = {
     "perfil": ("nombre", "descripcion"),
     "requisito": ("descripcion",),
     "restriccion": ("tipo_restriccion", "descripcion"),
     "dato": ("descripcion",),
+    "hallazgo": ("dominio", "etiqueta", "motivo"),
 }
 
 
@@ -95,11 +123,31 @@ def construir_contexto(respuestas: list) -> tuple:
     `TEXTO_LIBRE` salvo `nombre_proyecto`, más las cerradas sin significado
     autocontenido (hoy, únicamente `administrador_tipo_acciones`) — ver
     docstring del módulo. Devuelve `("", set())` si no hay nada que
-    interpretar.
+    interpretar (el corto-circuito ocurre ANTES de mirar los dominios
+    activos: sin texto libre que interpretar, tampoco vale la pena gastar
+    una llamada a Qwen solo para reportar hallazgos).
+
+    Cuando sí hay algo que interpretar, se añade al final una sección con
+    los dominios+etiquetas activos de esta corrida (TF-0032, A1) — el único
+    vocabulario que Qwen ve para el 5º tipo de salida, `"hallazgo"`; nunca
+    el catálogo de preguntas en sí.
     """
     relevantes = [r for r in respuestas if r.pregunta_id not in _EXCLUIDAS_DEL_CONTEXTO]
+    if not relevantes:
+        return "", set()
+
     bloques = [f"(id={r.id}) {r.pregunta_texto}\n{_texto_respuesta(r)}" for r in relevantes]
-    return "\n\n".join(bloques), {r.id for r in relevantes}
+    texto = "\n\n".join(bloques)
+
+    activos = dominios_activos(respuestas)
+    if activos:
+        lineas_dominios = [
+            f"- {dominio}: {', '.join(etiquetas)}" for dominio, etiquetas in sorted(activos.items())
+        ]
+        seccion_dominios = "## Dominios y etiquetas activos para esta corrida\n" + "\n".join(lineas_dominios)
+        texto = f"{texto}\n\n{seccion_dominios}"
+
+    return texto, {r.id for r in relevantes}
 
 
 def _texto_opcional(valor):
@@ -107,23 +155,24 @@ def _texto_opcional(valor):
 
 
 def _parsear_linea(linea: str, numero: int, ids_validos: set):
-    """Parsea una única línea como una entidad propuesta. Devuelve
-    `(entidad, None)` si es válida, o `(None, problema)` si no — nunca
-    lanza."""
+    """Parsea una única línea como una entidad propuesta o un hallazgo.
+    Devuelve `(entidad_o_None, hallazgo_o_None, problema_o_None)` — nunca
+    lanza. Exactamente uno de los dos primeros elementos es distinto de
+    `None` cuando no hay problema."""
     try:
         item = json.loads(linea)
     except (ValueError, TypeError):
-        return None, f"línea {numero}: no es JSON válido, descartada"
+        return None, None, f"línea {numero}: no es JSON válido, descartada"
     if not isinstance(item, dict):
-        return None, f"línea {numero}: el JSON no es un objeto, descartada"
+        return None, None, f"línea {numero}: el JSON no es un objeto, descartada"
 
     tipo = item.get("tipo")
     if tipo not in _TIPOS_VALIDOS:
-        return None, f"línea {numero}: tipo {tipo!r} no reconocido, descartada"
+        return None, None, f"línea {numero}: tipo {tipo!r} no reconocido, descartada"
 
     respuesta_id = item.get("respuesta_id")
     if isinstance(respuesta_id, bool) or not isinstance(respuesta_id, int) or respuesta_id not in ids_validos:
-        return None, (
+        return None, None, (
             f"línea {numero}: respuesta_id {respuesta_id!r} no corresponde a "
             "ninguna respuesta mostrada — posible información inventada, descartada"
         )
@@ -132,8 +181,15 @@ def _parsear_linea(linea: str, numero: int, ids_validos: set):
     for clave in _CAMPOS_REQUERIDOS[tipo]:
         valor = item.get(clave)
         if not isinstance(valor, str) or not valor.strip():
-            return None, f"línea {numero}: falta {clave!r} (o está vacío) para tipo {tipo!r}, descartada"
+            return None, None, f"línea {numero}: falta {clave!r} (o está vacío) para tipo {tipo!r}, descartada"
         valores[clave] = valor.strip()
+
+    if tipo == "hallazgo":
+        hallazgo = HallazgoLLM(
+            dominio=valores["dominio"], etiqueta=valores["etiqueta"],
+            motivo=valores["motivo"], respuesta_id=respuesta_id,
+        )
+        return None, hallazgo, None
 
     if tipo == "restriccion":
         campos = {"tipo": valores["tipo_restriccion"], "descripcion": valores["descripcion"]}
@@ -146,9 +202,10 @@ def _parsear_linea(linea: str, numero: int, ids_validos: set):
     else:
         campos = valores
 
-    return EntidadPropuesta(
+    entidad = EntidadPropuesta(
         tipo=tipo, campos=campos, confianza=NivelConfianza.MEDIA, respuesta_id=respuesta_id,
-    ), None
+    )
+    return entidad, None, None
 
 
 def _desenvolver_bloque_markdown(texto: str) -> str:
@@ -171,18 +228,26 @@ def parsear_entidades(texto: str, ids_validos: set) -> tuple:
     inválido, forma inesperada, tipo no reconocido, campos incompletos, o un
     `respuesta_id` que no aparece en `ids_validos`, se descarta y se reporta
     en `problemas` — nunca aborta el resto. Nunca lanza. `texto=""` devuelve
-    `([], [])`.
+    `([], [], [])`.
+
+    Devuelve `(entidades, hallazgos, problemas)` — TF-0032 separa las
+    `EntidadPropuesta` (perfil/requisito/restriccion/dato, ya persistibles
+    tal cual) de los `HallazgoLLM` (tipo `"hallazgo"`, que discovery.py debe
+    resolver a `pregunta_id` antes de persistir nada).
     """
     texto_efectivo = _desenvolver_bloque_markdown(texto.strip())
     entidades = []
+    hallazgos = []
     problemas = []
     for numero, linea_cruda in enumerate(texto_efectivo.splitlines(), start=1):
         linea = linea_cruda.strip()
         if not linea:
             continue
-        entidad, problema = _parsear_linea(linea, numero, ids_validos)
+        entidad, hallazgo, problema = _parsear_linea(linea, numero, ids_validos)
         if entidad is not None:
             entidades.append(entidad)
+        elif hallazgo is not None:
+            hallazgos.append(hallazgo)
         else:
             problemas.append(problema)
-    return entidades, problemas
+    return entidades, hallazgos, problemas

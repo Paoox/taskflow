@@ -304,3 +304,15 @@ body {
     flex-wrap: wrap;
     gap: 6px;
 }
+
+/* TF-0032 — reapertura y estado de Discovery */
+.discovery-reapertura-aviso {
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+
+.discovery-estado { margin-bottom: 16px; }
