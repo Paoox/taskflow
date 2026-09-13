@@ -7,19 +7,20 @@ entidades del modelo nuevo (`src.expediente.modelo`) las respuestas
 texto de la opción elegida ya es, literalmente, la afirmación que se
 persiste, sin que haga falta ningún juicio semántico.
 
-Regla de alcance (aprobada, ticket TF-0030): solo se interpretan aquí
-`plataforma` (+ `plataforma_detalle`), `plataforma_offline`, `monetizacion`
-y `monetizacion_forma`. Las demás preguntas cerradas quedan fuera de este
-módulo por diseño:
-
-* los controles de bucle (`*_continuar`) nunca aportan contenido propio;
-* las "compuertas" del árbol (`nuevo_o_existente`, `administracion_cantidad`,
-  `administracion_diferencias`, `dato_recordar`) solo deciden si se abre un
-  bloque, no declaran nada por sí mismas;
-* `administrador_tipo_acciones` solo tiene sentido junto al nombre de tipo
-  de administrador que la acompaña (`administrador_tipo_nombre`, texto
-  libre) — esa combinación requiere el juicio semántico que sí delega
-  `src.discovery.interpretacion_llm`.
+Regla de alcance (aprobada, ticket TF-0030, sin cambios en TF-0033): solo se
+interpretan aquí `plataforma` (+ `plataforma_detalle`), `plataforma_offline`,
+`monetizacion` y `monetizacion_forma` — los mismos 5 `pregunta_id`,
+conservados verbatim por el catálogo nuevo de 16 dominios
+(`docs/tickets/TF-0033.md`) precisamente para no tener que tocar este
+módulo. Las demás preguntas cerradas quedan fuera por diseño: los controles
+de bucle (`*_continuar`) nunca aportan contenido propio; las "compuertas"
+del árbol (`nuevo_o_existente`, `personas_gate`, `contenido_gate`,
+`dato_recordar`, y el resto de gates del catálogo nuevo) solo deciden si se
+abre un bloque, no declaran nada por sí mismas. TF-0033 retiró el único caso
+de "cerrada sin significado autocontenido" que existía en TF-0030
+(`administrador_tipo_acciones`, emparejada con `administrador_tipo_nombre`)
+junto con todo el bloque `administrador_tipo_*`/`administracion_*`: el
+dominio 06 nuevo no tiene un caso equivalente.
 
 No convertir automáticamente cualquier respuesta cerrada en una entidad es
 una regla explícita del checkpoint aprobado, no un descuido.
@@ -103,10 +104,17 @@ _TEXTO_PLATAFORMA_DETALLE = {
     OPCION_PLATAFORMA_COMPUTADORA: _TEXTO_PLATAFORMA[OPCION_PLATAFORMA_COMPUTADORA],
 }
 
+# TF-0033: `monetizacion_forma` amplió sus opciones de 4 a 7 (dominio 05 de
+# "Discovery Inteligente"). Mismo criterio: texto fijo por opción, sin
+# interpretación.
 _TEXTO_MONETIZACION_FORMA = {
-    "Una sola vez": "El cobro debe hacerse como un pago único.",
-    "Suscripción (pago recurrente)": "El cobro debe hacerse como una suscripción con pago recurrente.",
-    "Depende del uso": "El cobro debe depender del uso que la persona le dé al proyecto.",
+    "Pago único": "El cobro debe hacerse como un pago único.",
+    "Suscripción": "El cobro debe hacerse como una suscripción con pago recurrente.",
+    "Según uso": "El cobro debe depender del uso que la persona le dé al proyecto.",
+    "Comisión": "El cobro debe hacerse como una comisión sobre alguna transacción.",
+    "Anuncios": "El proyecto debe generar ingresos mostrando anuncios.",
+    "Donaciones": "El proyecto debe permitir recibir donaciones.",
+    "Combinación": "El cobro debe combinar más de una de estas formas.",
 }
 
 

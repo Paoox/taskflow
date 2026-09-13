@@ -102,17 +102,21 @@ class TestMonetizacion:
 
     def test_si_mas_forma_genera_dos_requisitos(self):
         r = _responder([], "monetizacion", "Sí, de alguna forma")
-        r = _responder(r, "monetizacion_forma", "Suscripción (pago recurrente)")
+        r = _responder(r, "monetizacion_forma", "Suscripción")
         propuestas = interpretar_directo(r)
         assert len(propuestas) == 2
         descripciones = " ".join(p.campos["descripcion"] for p in propuestas)
         assert "suscripción" in descripciones.lower()
 
-    def test_forma_no_se_no_agrega_segundo_requisito(self):
-        r = _responder([], "monetizacion", "Sí, de alguna forma")
-        r = _responder(r, "monetizacion_forma", "No sé")
-        propuestas = interpretar_directo(r)
-        assert len(propuestas) == 1
+    def test_las_7_formas_de_monetizacion_tienen_texto_fijo_mapeado(self):
+        """TF-0033 amplió `monetizacion_forma` de 4 a 7 opciones — todas
+        siguen siendo autocontenidas, ninguna queda sin requisito fijo."""
+        from src.formulario.preguntas import PREGUNTAS
+        for opcion in PREGUNTAS["monetizacion_forma"].opciones:
+            r = _responder([], "monetizacion", "Sí, de alguna forma")
+            r = _responder(r, "monetizacion_forma", opcion)
+            propuestas = interpretar_directo(r)
+            assert len(propuestas) == 2, f"opción {opcion!r} no generó su segundo requisito"
 
 
 class TestControlesDeFlujoYCompuertas:
@@ -122,21 +126,21 @@ class TestControlesDeFlujoYCompuertas:
     def test_continuar_no_genera_nada(self):
         r = _responder([], "perfil_usuario_continuar", "No")
         r = _responder(r, "funcionalidad_declarada_continuar", "Sí")
-        r = _responder(r, "administrador_tipo_continuar", "No")
+        r = _responder(r, "monetizacion_plan_continuar", "No")
         r = _responder(r, "dato_recordar_detalle_continuar", "No")
         assert interpretar_directo(r) == []
 
     def test_compuertas_no_generan_nada(self):
-        r = _responder([], "nuevo_o_existente", "Es un proyecto nuevo")
-        r = _responder(r, "administracion_cantidad", "Una sola persona")
-        r = _responder(r, "administracion_diferencias", "No")
+        r = _responder([], "nuevo_o_existente", "Nuevo")
+        r = _responder(r, "personas_gate", "Yo solo / todos igual")
+        r = _responder(r, "contenido_gate", "No")
         r = _responder(r, "dato_recordar", "No")
         assert interpretar_directo(r) == []
 
-    def test_administrador_tipo_acciones_por_si_sola_no_genera_nada(self):
+    def test_experiencia_persona_permisos_residual_por_si_sola_no_genera_nada(self):
         """Requiere ir emparejada con texto libre — se delega entera al LLM
         (`src.discovery.interpretacion_llm`), no se interpreta aquí."""
-        r = _responder([], "administrador_tipo_acciones", ["Ver información", "Agregar cosas nuevas"])
+        r = _responder([], "experiencia_persona_permisos_residual", ["Ver información", "Agregar cosas nuevas"])
         assert interpretar_directo(r) == []
 
 
@@ -145,7 +149,7 @@ class TestConfianzaSiempreAlta:
         r = _responder([], "plataforma", "Desde el celular")
         r = _responder(r, "plataforma_offline", "Sí")
         r = _responder(r, "monetizacion", "Sí, de alguna forma")
-        r = _responder(r, "monetizacion_forma", "Una sola vez")
+        r = _responder(r, "monetizacion_forma", "Pago único")
         propuestas = interpretar_directo(r)
         # plataforma + offline + monetizacion + monetizacion_forma = 4 propuestas.
         assert len(propuestas) == 4

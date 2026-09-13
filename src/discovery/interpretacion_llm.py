@@ -47,7 +47,6 @@ from src.discovery.catalogo_dominios import dominios_activos
 from src.discovery.interpretacion_directa import EntidadPropuesta
 from src.expediente.modelo import RespuestaFormulario, TipoPregunta
 from src.formulario.preguntas import PREGUNTAS
-from src.formulario.respuestas import deserializar_respuesta
 from src.proyectos.estado import NivelConfianza
 
 __all__ = ["HallazgoLLM", "construir_contexto", "parsear_entidades"]
@@ -67,27 +66,18 @@ class HallazgoLLM:
     motivo: str
     respuesta_id: int
 
-# Preguntas que `interpretacion_directa.py` ya consume de forma determinista:
-# no deben duplicarse aquí como contexto para el LLM.
-_YA_DETERMINISTAS = frozenset({
-    "plataforma", "plataforma_detalle", "plataforma_offline",
-    "monetizacion", "monetizacion_forma",
-})
-# Controles de bucle: nunca aportan contenido propio (regla 16 del ticket).
-_CONTROL_DE_FLUJO = frozenset({
-    "perfil_usuario_continuar", "funcionalidad_declarada_continuar",
-    "administrador_tipo_continuar", "dato_recordar_detalle_continuar",
-})
-# Compuertas del árbol sin contenido propio: solo deciden si se abre un
-# bloque; lo declarado vive en las preguntas que desbloquean, no aquí.
-_SOLO_COMPUERTA = frozenset({
-    "nuevo_o_existente", "administracion_cantidad", "administracion_diferencias",
-    "dato_recordar",
-})
 # `nombre_proyecto` se usa directamente, sin pasar por el LLM (regla 17).
 _DIRECTA_SIN_LLM = frozenset({"nombre_proyecto"})
 
-_EXCLUIDAS_DEL_CONTEXTO = _YA_DETERMINISTAS | _CONTROL_DE_FLUJO | _SOLO_COMPUERTA | _DIRECTA_SIN_LLM
+# TF-0033: con 16 dominios y ~90 `pregunta_id`, mantener una lista exhaustiva
+# de identificadores cerrados a excluir dejó de ser sostenible (y ya no hay
+# ninguna cerrada "sin significado autocontenido" que deba colarse al
+# contexto — `administrador_tipo_acciones`, el único caso así de TF-0030,
+# se retiró en TF-0033). El criterio se simplifica a lo que siempre fue la
+# intención: **todo `TEXTO_LIBRE` va al contexto, salvo `nombre_proyecto`**;
+# toda `OPCION_CERRADA` (gates, controles de bucle, o ya deterministas vía
+# `interpretacion_directa.py`) se excluye siempre — su contenido no requiere
+# juicio semántico o ya se interpreta en otro módulo.
 
 _TIPOS_VALIDOS = frozenset({"perfil", "requisito", "restriccion", "dato", "hallazgo"})
 # Claves de texto obligatorias por tipo, además de "tipo" y "respuesta_id".
@@ -101,16 +91,10 @@ _CAMPOS_REQUERIDOS = {
 
 
 def _texto_respuesta(fila: RespuestaFormulario) -> str:
-    """Texto legible de `fila.respuesta` para mostrar en el contexto.
-
-    Las cerradas (hoy, únicamente `administrador_tipo_acciones` llega hasta
-    aquí sin haber sido excluida) se deserializan a su lista de opciones
-    elegidas; las de texto libre se usan tal cual.
-    """
-    pregunta = PREGUNTAS.get(fila.pregunta_id)
-    if pregunta is not None and pregunta.tipo_pregunta == TipoPregunta.OPCION_CERRADA:
-        valor = deserializar_respuesta(pregunta, fila.respuesta)
-        return ", ".join(valor) if isinstance(valor, list) else valor
+    """Texto legible de `fila.respuesta` para mostrar en el contexto. Con el
+    filtro vigente (ver más abajo) solo llegan aquí preguntas `TEXTO_LIBRE`,
+    así que basta con usarlo tal cual — ya no existe ninguna `OPCION_CERRADA`
+    que deba colarse (ver docstring del módulo)."""
     return fila.respuesta
 
 
@@ -120,19 +104,23 @@ def construir_contexto(respuestas: list) -> tuple:
     `parsear_entidades` para rechazar cualquier `respuesta_id` inventado).
 
     Solo incluye lo que de verdad requiere interpretación semántica: todo
-    `TEXTO_LIBRE` salvo `nombre_proyecto`, más las cerradas sin significado
-    autocontenido (hoy, únicamente `administrador_tipo_acciones`) — ver
-    docstring del módulo. Devuelve `("", set())` si no hay nada que
-    interpretar (el corto-circuito ocurre ANTES de mirar los dominios
-    activos: sin texto libre que interpretar, tampoco vale la pena gastar
-    una llamada a Qwen solo para reportar hallazgos).
+    `TEXTO_LIBRE` salvo `nombre_proyecto` (regla 17) — ver docstring del
+    módulo. Devuelve `("", set())` si no hay nada que interpretar (el
+    corto-circuito ocurre ANTES de mirar los dominios activos: sin texto
+    libre que interpretar, tampoco vale la pena gastar una llamada a Qwen
+    solo para reportar hallazgos).
 
     Cuando sí hay algo que interpretar, se añade al final una sección con
     los dominios+etiquetas activos de esta corrida (TF-0032, A1) — el único
     vocabulario que Qwen ve para el 5º tipo de salida, `"hallazgo"`; nunca
     el catálogo de preguntas en sí.
     """
-    relevantes = [r for r in respuestas if r.pregunta_id not in _EXCLUIDAS_DEL_CONTEXTO]
+    relevantes = [
+        r for r in respuestas
+        if r.pregunta_id not in _DIRECTA_SIN_LLM
+        and PREGUNTAS.get(r.pregunta_id) is not None
+        and PREGUNTAS[r.pregunta_id].tipo_pregunta == TipoPregunta.TEXTO_LIBRE
+    ]
     if not relevantes:
         return "", set()
 

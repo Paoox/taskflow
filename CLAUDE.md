@@ -1266,3 +1266,141 @@ El objetivo es construir una aplicación que pueda evolucionar hacia un sistema 
 La evolución debe realizarse de forma incremental, verificable y trazable.
 
 Nunca sacrificar la simplicidad actual por necesidades hipotéticas futuras.
+
+---
+
+# 36. Hoja de ruta activa — Descubridor razonante + orquestación de agentes
+
+**Última actualización:** 2026-09-12. **Plazo objetivo:** 2 semanas desde
+esa fecha para que Taskflow esté listo para usarse con proyectos reales.
+
+## 36.1 Qué cambió respecto a lo construido hasta TF-0033
+
+Pao entregó (2026-09-12) un documento de visión completo que reencuadra el
+proyecto. Resumen de la visión (no repetir el documento completo, vive en
+la conversación y debe trasladarse a un ADR cuando se cierre el primer
+ticket de esta hoja de ruta):
+
+* El **Descubridor** no es un cuestionario fijo ni un árbol de decisión
+  predeterminado — debe analizar continuamente el estado acumulado del
+  proyecto y decidir dinámicamente qué falta. El formulario es un
+  mecanismo de captura al servicio del Descubridor, **no el cerebro**.
+* "Suficientemente definido" no significa "todos los campos contestados"
+  — es un juicio sobre si hay información concreta suficiente para el MVP.
+* Tras el Expediente Maestro, el trabajo se reparte entre **agentes
+  especializados** (Arquitecto, Backend, Frontend, BD, Integraciones,
+  Seguridad, Pruebas, QA, Documentación...), cada uno con las herramientas
+  que necesite, con validación cruzada entre agentes.
+* El **Documentador** no escribe el Expediente: lo recibe completo y lo
+  **descompone en tickets** para los demás agentes.
+* Debe soportar **múltiples proyectos simultáneos**, cada uno con su
+  propio tablero tipo Jira — tickets que los propios agentes mueven de
+  estado y actualizan con % de avance.
+
+**Diagnóstico honesto (no repetir el análisis completo aquí, vive en la
+conversación):** el árbol determinista de 16 dominios de TF-0033
+(`src/formulario/arbol.py` + `preguntas.py`) es el paradigma que la
+visión descarta explícitamente — es más rico que el catálogo de 27
+preguntas que reemplazó, pero sigue siendo una lista predeterminada, no
+un Descubridor razonante. **Se conservan**: el modelo del Expediente
+(`src/expediente/modelo.py`), la trazabilidad (`acciones`,
+`src/repositorios/acciones.py`), y la abstracción de proveedor de IA
+(`ClienteIA`/`ClienteEco`/`ClienteOllama`). **Se reemplaza**: el motor de
+navegación del formulario. **Se construye desde cero**: orquestación
+multi-agente, sistema de tickets con estado/avance, tablero multi-proyecto.
+
+## 36.2 Modelo: actualización de la decisión (2026-09-13)
+
+La limitación medida hasta ahora (~150s/llamada con `qwen2.5:3b` vía
+Ollama local, TF-0032) es una limitación de **capacidad de la máquina
+local actual de Pao**, no una limitación arquitectónica del proyecto. Pao
+considera viable pasar a un modelo más reciente/capaz, y usar **skills y
+LoRAs** para reforzar al modelo en lo que el Descubridor necesita — esto
+se evalúa cuando corresponda, no bloquea el diseño.
+
+**Principio de diseño explícito y no negociable para el Descubridor y
+para cualquier pieza que dependa de un modelo:** el sistema debe quedar
+**escalable** (soportar que el proyecto crezca) y **adaptativo/agnóstico
+de modelo** — hoy puede usarse un modelo, mañana otro distinto, y
+cualquiera debe poder cumplir la función del Descubridor sin rediseñar el
+sistema. Esto ya era el espíritu de la sección 26 ("evitar depender de un
+único proveedor; permitir cambiar de modelo") y de la abstracción
+`ClienteIA`/`crear_cliente()` (TF-0024) — el Descubridor nuevo debe
+construirse **sobre** esa abstracción, nunca acoplado a las
+particularidades de `qwen2.5:3b` ni de Ollama.
+
+Sigue sin resolverse (y no se resuelve por decreto, sino con la prueba
+real del lunes — ver 36.5): si el modelo actualmente disponible sostiene
+con calidad/velocidad aceptables el razonamiento del Descubridor. La
+respuesta puede ser "sí, tal cual", "sí, con ayuda de skills/LoRA", o "no,
+hace falta otro modelo" — cualquiera de las tres es aceptable siempre que
+la arquitectura no dependa de cuál termine siendo.
+
+## 36.3 Pendientes (lista viva — actualizar al cerrar cada ticket)
+
+```text
+[ ] Validar capacidad/latencia real del modelo para razonar sobre el
+    Expediente (qué falta, qué preguntar, si es suficiente) — se hace vía
+    la prueba real en la UI del lunes (36.5), no como experimento aislado.
+[ ] Diseñar el Descubridor nuevo sobre la abstracción ClienteIA existente
+    — nunca acoplado a un modelo concreto (36.2). El catálogo de 16
+    dominios de TF-0033 pasa de "árbol obligatorio" a "mapa de
+    referencia/contexto" que el modelo consulta, sin estar obligado a
+    recorrerlo secuencialmente.
+[ ] Definir el mecanismo de "suficientemente definido para el MVP" como
+    juicio independiente de "todos los campos contestados".
+[ ] Soportar Discovery a partir de un repositorio existente, no solo de
+    respuestas de formulario.
+[ ] Ampliar el Expediente Maestro para cubrir funcionalidades, flujos,
+    reglas de negocio, integraciones, seguridad, marca — hoy la mayoría
+    de esas respuestas quedan crudas en `respuestas_formulario`, sin
+    convertirse en entidades del Expediente.
+[ ] Redefinir el rol del agente Documentador: de "redactor" a
+    "orquestador" que recibe el Expediente y lo descompone en tickets
+    para los demás agentes.
+[ ] Diseñar el primer agente especializado real más allá de
+    InterpreteFormulario/Documentador (candidato: Arquitecto).
+[ ] Diseñar el sistema de tickets con estado + % de avance, actualizable
+    por los propios agentes.
+[ ] Diseñar el tablero multi-proyecto (tipo Jira) sobre ese sistema de
+    tickets.
+[ ] Evaluar si el plazo de 2 semanas exige recortar alcance (probable) y
+    decidir qué queda para después de la primera versión usable.
+```
+
+## 36.4 Convención de trabajo para esta hoja de ruta
+
+* Todo el trabajo de esta hoja de ruta se documenta con tickets
+  (`docs/tickets/TF-XXXX.md`, sección 29.1) — sin excepción, "por si algo
+  llega a tronar" (Pao, 2026-09-12).
+* **Al cerrar cada ticket de esta hoja de ruta, actualizar esta sección**
+  (36.1 si cambia el diagnóstico, 36.3 tachando o afinando pendientes) —
+  no dejar que la conversación sea el único registro del avance.
+* No agregar código nuevo a `src/formulario/arbol.py`/`preguntas.py`
+  como si fuera la dirección definitiva mientras la decisión 36.2 siga
+  sin resolver — evita construir más encima del paradigma que se va a
+  reemplazar.
+* **Al iniciar cada sesión de trabajo, revisar esta sección (36) antes de
+  continuar** — decirle a Pao en qué quedamos y retomar el mismo hilo, en
+  vez de asumir contexto o volver a preguntar algo ya decidido aquí.
+
+## 36.5 Próxima sesión (lunes, retomar desde aquí)
+
+Plan acordado (2026-09-13, precisado 2026-09-14) — dos pasos, en este
+orden:
+
+1. **Ticket del Descubridor primero.** Pulir/rediseñar el flujo de
+   Discovery encaminando el paradigma al enfoque correcto (36.1/36.2):
+   dejar de tratar el catálogo de 16 dominios como árbol obligatorio y
+   moverlo hacia el Descubridor razonante que consulta ese mapa, sin
+   estar forzado a recorrerlo secuencialmente. Este es el ticket real de
+   la hoja de ruta — con su documento en `docs/tickets/`, sección 36.4.
+2. **Después, prueba real en la UI** (no un experimento aislado de
+   prompt) — ya con el ticket concluido: observar cómo se comporta el
+   modelo y cómo toma la data ya capturada del formulario para descubrir
+   qué falta todavía para el MVP del proyecto. Esa observación es la que
+   termina de decir si el modelo disponible alcanza (36.2).
+
+Antes de esa sesión, no se ha decidido todavía ningún diseño concreto del
+Descubridor nuevo — sigue siendo un pendiente de 36.3, no una
+implementación en curso.

@@ -15,7 +15,7 @@ from src.formulario.respuestas import (
 
 _PREGUNTA_LIBRE = PREGUNTAS["problema_objetivo"]
 _PREGUNTA_CERRADA_UNICA = PREGUNTAS["monetizacion"]
-_PREGUNTA_CERRADA_MULTIPLE = PREGUNTAS["administrador_tipo_acciones"]
+_PREGUNTA_CERRADA_MULTIPLE = PREGUNTAS["experiencia_persona_permisos_residual"]
 
 
 class TestValidarTextoLibre:

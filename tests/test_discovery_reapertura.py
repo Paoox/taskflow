@@ -62,8 +62,8 @@ class TestGapResoluble:
 
     def test_respuesta_libre_suficiente_resuelve(self, db):
         codigo = "PROY-R03"
-        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
-        _registrar(codigo, "dato_recordar_detalle", "El historial de pedidos, sin datos de pago.")
+        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.retencion", motivo="x")
+        _registrar(codigo, "dato_retencion", "Se borra automáticamente después de un año.")
 
         resultado = procesar_reapertura(codigo, "gap", gap.id, _ClienteFalso(""))  # Qwen no vuelve a señalar nada
 
@@ -72,11 +72,11 @@ class TestGapResoluble:
 
     def test_respuesta_libre_que_qwen_sigue_senalando_no_resuelve(self, db):
         codigo = "PROY-R04"
-        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
-        fila = _registrar(codigo, "dato_recordar_detalle", "Algo, no sé bien qué.")
+        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.retencion", motivo="x")
+        fila = _registrar(codigo, "dato_retencion", "Algo, no sé bien cuánto tiempo.")
         cliente = _ClienteFalso(_linea(
-            tipo="hallazgo", respuesta_id=fila.id, dominio="datos", etiqueta="sensibilidad",
-            motivo="Sigue sin especificar si incluye datos sensibles.",
+            tipo="hallazgo", respuesta_id=fila.id, dominio="datos", etiqueta="retencion",
+            motivo="Sigue sin especificar cuánto tiempo se conserva.",
         ))
 
         resultado = procesar_reapertura(codigo, "gap", gap.id, cliente)
@@ -187,7 +187,7 @@ class TestIdempotencia:
 class TestSinPreguntaCatalogada:
     def test_devuelve_problema_sin_lanzar(self, db):
         codigo = "PROY-R10"
-        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "marca.logo", motivo="x")
+        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "marca.etiqueta_inventada", motivo="x")
         resultado = procesar_reapertura(codigo, "gap", gap.id, _ClienteFalso())
         assert resultado.ya_procesado is False
         assert resultado.resuelto is False
@@ -213,9 +213,9 @@ class TestTipoHallazgoInvalido:
 class TestEncadenamiento:
     def test_un_hallazgo_distinto_se_persiste_como_nuevo_gap(self, db):
         codigo = "PROY-R14"
-        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
-        fila = _registrar(codigo, "dato_recordar_detalle", "El historial de pedidos")
-        # Qwen resuelve ESTE gap (no vuelve a señalar datos.sensibilidad) pero
+        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.retencion", motivo="x")
+        fila = _registrar(codigo, "dato_retencion", "El historial de pedidos se conserva un año")
+        # Qwen resuelve ESTE gap (no vuelve a señalar datos.retencion) pero
         # además encuentra uno nuevo, distinto — una cadena legítima.
         cliente = _ClienteFalso(_linea(
             tipo="hallazgo", respuesta_id=fila.id, dominio="funcionalidad",
@@ -236,8 +236,8 @@ class TestEncadenamiento:
         for i in range(LIMITE_PROFUNDIDAD_CADENA):
             RepositorioGaps().crear(codigo, "respuesta_formulario", f"restricciones.otro{i}", motivo="x")
 
-        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
-        fila = _registrar(codigo, "dato_recordar_detalle", "El historial de pedidos")
+        gap = RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.retencion", motivo="x")
+        fila = _registrar(codigo, "dato_retencion", "El historial de pedidos se conserva un año")
         cliente = _ClienteFalso(_linea(
             tipo="hallazgo", respuesta_id=fila.id, dominio="funcionalidad",
             etiqueta="funcionalidad_faltante", motivo="x",

@@ -7,22 +7,55 @@ defecto (sin red).
 import re
 
 _PASOS = [
-    ("nuevo_o_existente", "Es un proyecto nuevo"),
+    ("nuevo_o_existente", "Nuevo"),
     ("nombre_proyecto", "Cafecito"),
+    ("nombre_proyecto_estado", "Nombre definido"),
     ("problema_objetivo", "Quiero llevar el control de pedidos de mi cafetería."),
-    ("plataforma", "Desde el celular"),
-    ("plataforma_offline", "Sí"),
+    ("personas_gate", "Varias personas con roles distintos"),
     ("perfil_usuario", "Meseros del café"),
     ("perfil_usuario_continuar", "No"),
-    ("administracion_cantidad", "Una sola persona"),
-    ("funcionalidad_declarada", "Registrar pedidos nuevos"),
-    ("funcionalidad_declarada_continuar", "No"),
-    ("monetizacion", "Sí, de alguna forma"),
-    ("monetizacion_forma", "Suscripción (pago recurrente)"),
+    ("experiencia_persona_narrativa", "Llegan, ven la lista de pedidos, los marcan como listos."),
+    ("experiencia_persona_frecuencia", "Regularmente"),
+    ("experiencia_persona_primera_vez", "La primera vez reciben una breve explicación."),
+    ("experiencia_persona_permisos_residual", ["Ver información"]),
+    ("plataforma", "Desde el celular"),
+    ("plataforma_offline", "Sí"),
+    ("interaccion_cuenta", "Necesita cuenta para lo esencial"),
+    ("interaccion_resultado_valor", "El pedido queda registrado y listo para prepararse."),
+    ("contenido_gate", "No"),
     ("dato_recordar", "No"),
+    ("monetizacion", "Sí, de alguna forma"),
+    ("monetizacion_forma", "Suscripción"),
+    ("monetizacion_planes_n", "1"),
+    ("monetizacion_plan_detalle", "Básico: acceso a todas las funciones"),
+    ("monetizacion_plan_continuar", "No"),
+    ("monetizacion_prueba_gratis", "No"),
+    ("monetizacion_impago", "Pierde acceso tras un periodo de gracia."),
+    ("monetizacion_autogestion", "Sí"),
+    ("monetizacion_factura", "No"),
+    ("monetizacion_salida", "No, no le paga a nadie"),
+    ("seguridad_aislamiento", "Depende"),
+    ("seguridad_verificacion", "No"),
+    ("seguridad_sensible", "No"),
+    ("integraciones_gate", "No"),
+    ("automatizacion_gate", "No"),
+    ("ia_producto_gate", "No"),
+    ("sintesis_confirmacion", "Sí"),
+    ("sintesis_abandono", "Puede retomar después."),
+    ("sintesis_reanudacion", "Sí."),
+    ("sintesis_concurrencia", "No debería pasar, es un solo mesero por turno."),
+    ("sintesis_peor_caso", "Se reintenta el pedido."),
+    ("marca_gate", "No tengo nada"),
+    ("marca_prioridad", "No"),
+    ("funcionalidad_declarada", "Registrar pedidos nuevos"),
+    ("funcionalidad_prioridad", "Indispensable"),
+    ("funcionalidad_declarada_continuar", "No"),
+    ("funcionalidad_prohibida", "No debe perder pedidos ya confirmados."),
     ("restriccion_tecnica", "Ya usamos Google Sheets, si se puede reutilizar mejor."),
     ("restriccion_tiempo_presupuesto", "Presupuesto limitado, no hay fecha límite estricta."),
     ("restriccion_negocio", "No debe compartir los datos de los clientes con terceros."),
+    ("restriccion_legal", "No"),
+    ("cierre_exito", "Que los meseros dejen de usar papel para tomar pedidos."),
     ("cierre_libre", "Nada más por ahora."),
 ]
 
@@ -58,7 +91,7 @@ class TestDiscoveryFormularioGet:
         resp = client.get("/discovery/DISC-aaaaaaaa/formulario")
         assert resp.status_code == 200
         assert b"nuevo_o_existente" in resp.data
-        assert "¿Es un proyecto nuevo o ya tienes algo construido?".encode() in resp.data
+        assert "¿Es un proyecto nuevo o ya existe algo construido?".encode() in resp.data
 
     def test_incluye_csrf_token(self, client):
         resp = client.get("/discovery/DISC-aaaaaaaa/formulario")
@@ -72,7 +105,7 @@ class TestDiscoveryFormularioGet:
 class TestDiscoveryFormularioPost:
     def test_responder_avanza_a_la_siguiente_pregunta(self, client, csrf_token):
         codigo = "DISC-bbbbbbbb"
-        resp = _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        resp = _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith(f"/discovery/{codigo}/formulario")
 
@@ -81,10 +114,10 @@ class TestDiscoveryFormularioPost:
 
     def test_respuesta_queda_en_el_historial(self, client, csrf_token):
         codigo = "DISC-cccccccc"
-        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         resp = client.get(f"/discovery/{codigo}/formulario")
         assert b"Respuestas hasta ahora" in resp.data
-        assert "Es un proyecto nuevo".encode() in resp.data
+        assert "Nuevo".encode() in resp.data
 
     def test_pregunta_id_desconocido_responde_400(self, client, csrf_token):
         resp = client.post(
@@ -105,15 +138,17 @@ class TestDiscoveryFormularioPost:
     def test_sin_csrf_token_responde_403(self, client):
         resp = client.post(
             "/discovery/DISC-ffffffff/formulario",
-            data={"pregunta_id": "nuevo_o_existente", "respuesta": "Es un proyecto nuevo"},
+            data={"pregunta_id": "nuevo_o_existente", "respuesta": "Nuevo"},
         )
         assert resp.status_code == 403
 
     def test_multiple_checkboxes_se_guardan_y_se_muestran_deserializados(self, client, csrf_token):
         codigo = "DISC-11111111"
-        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         _responder(client, csrf_token, codigo, "nombre_proyecto", "X")
+        _responder(client, csrf_token, codigo, "nombre_proyecto_estado", "Nombre definido")
         _responder(client, csrf_token, codigo, "problema_objetivo", "algo")
+        _responder(client, csrf_token, codigo, "personas_gate", "Yo solo / todos igual")
         resp_plataforma = _responder(client, csrf_token, codigo, "plataforma", "En varios de estos lugares")
         assert resp_plataforma.status_code == 302
 
@@ -138,9 +173,11 @@ class TestDiscoveryFormularioPost:
         múltiple (comportamiento existente de `src.formulario`, sin cambios
         aquí) — la UI no le agrega una regla de "al menos una" que no exista."""
         codigo = "DISC-22222222"
-        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         _responder(client, csrf_token, codigo, "nombre_proyecto", "X")
+        _responder(client, csrf_token, codigo, "nombre_proyecto_estado", "Nombre definido")
         _responder(client, csrf_token, codigo, "problema_objetivo", "algo")
+        _responder(client, csrf_token, codigo, "personas_gate", "Yo solo / todos igual")
         _responder(client, csrf_token, codigo, "plataforma", "En varios de estos lugares")
         resp = client.post(
             f"/discovery/{codigo}/formulario",
@@ -161,7 +198,7 @@ class TestDiscoveryFormularioCompleto:
 class TestDiscoveryEjecutar:
     def test_formulario_incompleto_redirige_al_formulario(self, client, csrf_token):
         codigo = "DISC-44444444"
-        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         resp = client.post(f"/discovery/{codigo}/ejecutar", data={"csrf_token": csrf_token})
         assert resp.status_code == 302
         assert resp.headers["Location"].endswith(f"/discovery/{codigo}/formulario")
@@ -185,7 +222,7 @@ class TestDiscoveryResultado:
 
     def test_formulario_incompleto_muestra_aviso(self, client, csrf_token):
         codigo = "DISC-88888888"
-        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder(client, csrf_token, codigo, "nuevo_o_existente", "Nuevo")
         resp = client.get(f"/discovery/{codigo}/resultado")
         assert resp.status_code == 200
         assert "todavía no está completo".encode() in resp.data
@@ -329,11 +366,11 @@ class TestReaperturaPorGapEnLaUI:
 
         codigo = "DISC-r0000004"
         _completar_formulario(client, csrf_token, codigo)
-        RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.sensibilidad", motivo="x")
+        RepositorioGaps().crear(codigo, "respuesta_formulario", "datos.retencion", motivo="x")
 
         resp = client.get(f"/discovery/{codigo}/formulario")
         assert resp.status_code == 200
-        assert b"dato_recordar_detalle" in resp.data
+        assert b"dato_retencion" in resp.data
         assert "Discovery encontró algo que aclarar".encode("utf-8") in resp.data
 
 

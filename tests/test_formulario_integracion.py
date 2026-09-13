@@ -30,16 +30,16 @@ class TestCicloCompletoContraLaBaseReal:
         primera = siguiente_pregunta(repo.listar(codigo))
         assert primera.pregunta_id == "nuevo_o_existente"
 
-        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Nuevo")
         segunda = siguiente_pregunta(repo.listar(codigo))
         assert segunda.pregunta_id == "nombre_proyecto"
 
     def test_seleccion_multiple_persistida_como_json_se_lee_de_vuelta_correctamente(self, repo):
         codigo = "PROY-002"
-        pregunta = PREGUNTAS["administrador_tipo_acciones"]
+        pregunta = PREGUNTAS["experiencia_persona_permisos_residual"]
         valor_original = ["Ver información", "Eliminar cosas", "Otra cosa"]
 
-        _responder_y_persistir(repo, codigo, "administrador_tipo_acciones", valor_original)
+        _responder_y_persistir(repo, codigo, "experiencia_persona_permisos_residual", valor_original)
 
         fila = repo.listar(codigo)[0]
         import json
@@ -47,23 +47,24 @@ class TestCicloCompletoContraLaBaseReal:
         assert deserializar_respuesta(pregunta, fila.respuesta) == valor_original
 
     def test_respuestas_conservan_codigo_por_expediente(self, repo):
-        _responder_y_persistir(repo, "PROY-A", "nuevo_o_existente", "Es un proyecto nuevo")
-        _responder_y_persistir(repo, "PROY-B", "nuevo_o_existente", "Ya tengo algo construido")
+        _responder_y_persistir(repo, "PROY-A", "nuevo_o_existente", "Nuevo")
+        _responder_y_persistir(repo, "PROY-B", "nuevo_o_existente", "Ya existe algo")
 
         assert len(repo.listar("PROY-A")) == 1
         assert len(repo.listar("PROY-B")) == 1
-        assert repo.listar("PROY-A")[0].respuesta == "Es un proyecto nuevo"
-        assert repo.listar("PROY-B")[0].respuesta == "Ya tengo algo construido"
+        assert repo.listar("PROY-A")[0].respuesta == "Nuevo"
+        assert repo.listar("PROY-B")[0].respuesta == "Ya existe algo"
 
     def test_bucle_perfil_usuario_persistido_produce_multiples_filas(self, repo):
         codigo = "PROY-003"
         r = repo.listar(codigo)
         assert siguiente_pregunta(r).pregunta_id != "perfil_usuario"  # todavía no llegamos ahí
 
-        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Nuevo")
         _responder_y_persistir(repo, codigo, "nombre_proyecto", "")
+        _responder_y_persistir(repo, codigo, "nombre_proyecto_estado", "Nombre definido")
         _responder_y_persistir(repo, codigo, "problema_objetivo", "algo")
-        _responder_y_persistir(repo, codigo, "plataforma", "No estoy seguro todavía")
+        _responder_y_persistir(repo, codigo, "personas_gate", "Varias personas con roles distintos")
 
         assert siguiente_pregunta(repo.listar(codigo)).pregunta_id == "perfil_usuario"
         _responder_y_persistir(repo, codigo, "perfil_usuario", "clientes")
@@ -73,7 +74,8 @@ class TestCicloCompletoContraLaBaseReal:
 
         filas_perfil = [f for f in repo.listar(codigo) if f.pregunta_id == "perfil_usuario"]
         assert [f.respuesta for f in filas_perfil] == ["clientes", "empleados"]
-        assert siguiente_pregunta(repo.listar(codigo)).pregunta_id == "administracion_cantidad"
+        # tras cerrar 01, sigue 01b: sub-recorrido por la primera persona nombrada
+        assert siguiente_pregunta(repo.listar(codigo)).pregunta_id == "experiencia_persona_narrativa"
 
     def test_formulario_nunca_escribe_en_tablas_de_entidades_interpretadas(self, repo, db):
         """Frontera formulario -> respuestas_formulario -> Discovery ->
@@ -84,7 +86,7 @@ class TestCicloCompletoContraLaBaseReal:
         import src.database as database
 
         codigo = "PROY-004"
-        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Es un proyecto nuevo")
+        _responder_y_persistir(repo, codigo, "nuevo_o_existente", "Nuevo")
         _responder_y_persistir(repo, codigo, "problema_objetivo", "una calculadora")
 
         conn = sqlite3.connect(database.DATABASE_NAME)

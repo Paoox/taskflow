@@ -53,27 +53,62 @@ def _registrar(codigo, pregunta_id, valor, repo):
     return repo.registrar(codigo, pregunta_id, pregunta.texto, pregunta.tipo_pregunta, texto)
 
 
-# Recorrido lineal completo del árbol (proyecto nuevo, un solo perfil, un
-# solo administrador implícito, sin datos a recordar) — exercita al menos
+# Recorrido lineal completo del árbol de 16 dominios (TF-0033): proyecto
+# nuevo, un solo perfil sin señal de administración, contenido/integraciones
+# /automatización en "No", suscripción en Gate A y Gate B en "No", sin datos
+# a recordar (dispara la contradicción real ya auditada) — exercita al menos
 # una pregunta de cada categoría: deterministas (plataforma*, monetizacion*),
 # de texto libre (LLM), controles de bucle y compuertas.
 _PASOS = [
-    ("nuevo_o_existente", "Es un proyecto nuevo"),
+    ("nuevo_o_existente", "Nuevo"),
     ("nombre_proyecto", "Cafecito"),
+    ("nombre_proyecto_estado", "Nombre definido"),
     ("problema_objetivo", "Quiero llevar el control de pedidos de mi cafetería."),
-    ("plataforma", "Desde el celular"),
-    ("plataforma_offline", "Sí"),
+    ("personas_gate", "Varias personas con roles distintos"),
     ("perfil_usuario", "Meseros del café"),
     ("perfil_usuario_continuar", "No"),
-    ("administracion_cantidad", "Una sola persona"),
-    ("funcionalidad_declarada", "Registrar pedidos nuevos"),
-    ("funcionalidad_declarada_continuar", "No"),
-    ("monetizacion", "Sí, de alguna forma"),
-    ("monetizacion_forma", "Suscripción (pago recurrente)"),
+    ("experiencia_persona_narrativa", "Llegan, ven la lista de pedidos, los marcan como listos."),
+    ("experiencia_persona_frecuencia", "Regularmente"),
+    ("experiencia_persona_primera_vez", "La primera vez reciben una breve explicación."),
+    ("experiencia_persona_permisos_residual", ["Ver información"]),
+    ("plataforma", "Desde el celular"),
+    ("plataforma_offline", "Sí"),
+    ("interaccion_cuenta", "Necesita cuenta para lo esencial"),
+    ("interaccion_resultado_valor", "El pedido queda registrado y listo para prepararse."),
+    ("contenido_gate", "No"),
     ("dato_recordar", "No"),
+    ("monetizacion", "Sí, de alguna forma"),
+    ("monetizacion_forma", "Suscripción"),
+    ("monetizacion_planes_n", "1"),
+    ("monetizacion_plan_detalle", "Básico: acceso a todas las funciones"),
+    ("monetizacion_plan_continuar", "No"),
+    ("monetizacion_prueba_gratis", "No"),
+    ("monetizacion_impago", "Pierde acceso tras un periodo de gracia."),
+    ("monetizacion_autogestion", "Sí"),
+    ("monetizacion_factura", "No"),
+    ("monetizacion_salida", "No, no le paga a nadie"),
+    ("seguridad_aislamiento", "Depende"),
+    ("seguridad_verificacion", "No"),
+    ("seguridad_sensible", "No"),
+    ("integraciones_gate", "No"),
+    ("automatizacion_gate", "No"),
+    ("ia_producto_gate", "No"),
+    ("sintesis_confirmacion", "Sí"),
+    ("sintesis_abandono", "Puede retomar después."),
+    ("sintesis_reanudacion", "Sí."),
+    ("sintesis_concurrencia", "No debería pasar, es un solo mesero por turno."),
+    ("sintesis_peor_caso", "Se reintenta el pedido."),
+    ("marca_gate", "No tengo nada"),
+    ("marca_prioridad", "No"),
+    ("funcionalidad_declarada", "Registrar pedidos nuevos"),
+    ("funcionalidad_prioridad", "Indispensable"),
+    ("funcionalidad_declarada_continuar", "No"),
+    ("funcionalidad_prohibida", "No debe perder pedidos ya confirmados."),
     ("restriccion_tecnica", "Ya usamos Google Sheets, si se puede reutilizar mejor."),
     ("restriccion_tiempo_presupuesto", "Presupuesto limitado, no hay fecha límite estricta."),
     ("restriccion_negocio", "No debe compartir los datos de los clientes con terceros."),
+    ("restriccion_legal", "No"),
+    ("cierre_exito", "Que los meseros dejen de usar papel para tomar pedidos."),
     ("cierre_libre", "Nada más por ahora."),
 ]
 
@@ -107,7 +142,7 @@ class TestFormularioIncompleto:
 
     def test_formulario_a_medias_lanza(self, db):
         repo = RepositorioRespuestasFormulario()
-        _registrar("PROY-MEDIO", "nuevo_o_existente", "Es un proyecto nuevo", repo)
+        _registrar("PROY-MEDIO", "nuevo_o_existente", "Nuevo", repo)
         _registrar("PROY-MEDIO", "nombre_proyecto", "X", repo)
         with pytest.raises(FormularioIncompleto):
             ejecutar_discovery("PROY-MEDIO", _ClienteFalso())
@@ -382,6 +417,10 @@ for _pid, _val in _PASOS:
     if _pid == "dato_recordar":
         _PASOS_SIN_CONTRADICCION.append((_pid, "Sí"))
         _PASOS_SIN_CONTRADICCION.append(("dato_recordar_detalle", "El historial de pedidos de cada cliente"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_sensible", "No"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_retencion", "Para siempre"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_quien_ve", "El dueño del café"))
+        _PASOS_SIN_CONTRADICCION.append(("dato_quien_modifica", "El dueño del café"))
         _PASOS_SIN_CONTRADICCION.append(("dato_recordar_detalle_continuar", "No"))
     else:
         _PASOS_SIN_CONTRADICCION.append((_pid, _val))
@@ -391,6 +430,23 @@ def _completar_formulario_sin_contradiccion(codigo: str) -> dict:
     repo = RepositorioRespuestasFormulario()
     filas = {}
     for pregunta_id, valor in _PASOS_SIN_CONTRADICCION:
+        filas[pregunta_id] = _registrar(codigo, pregunta_id, valor, repo)
+    return filas
+
+
+# TF-0033, dominio 14 §3.4: mismo recorrido "sin contradicción" (para
+# aislar el efecto de rechazar la síntesis del de la contradicción real ya
+# cubierta arriba), pero con `sintesis_confirmacion="No"`.
+_PASOS_SINTESIS_RECHAZADA = [
+    (pid, "No") if pid == "sintesis_confirmacion" else (pid, val)
+    for pid, val in _PASOS_SIN_CONTRADICCION
+]
+
+
+def _completar_formulario_sintesis_rechazada(codigo: str) -> dict:
+    repo = RepositorioRespuestasFormulario()
+    filas = {}
+    for pregunta_id, valor in _PASOS_SINTESIS_RECHAZADA:
         filas[pregunta_id] = _registrar(codigo, pregunta_id, valor, repo)
     return filas
 
@@ -444,6 +500,44 @@ class TestEstadoDiscovery:
         ejecutar_discovery("PROY-018B", _ClienteFalso(""), repo_acciones=repo_acc)
         accion = next(a for a in repo_acc.listar(ticket="PROY-018B") if a["tipo"] == "discovery_formulario")
         assert json.loads(accion["resultado"])["estado"] == "requiere_aclaracion"
+
+
+class TestSintesisRechazadaGeneraGapExplicito:
+    """TF-0033, dominio 14 §3.4: confirmar "No" en la síntesis no se
+    ignora — usa el mecanismo YA existente de TF-0032 (Gap vía
+    `reglas_consecuencia`, mismo `evaluar_reglas()` que la contradicción
+    real), sin inventar un mecanismo nuevo."""
+
+    def test_genera_un_gap_sin_pregunta_reactivable(self, db):
+        filas = _completar_formulario_sintesis_rechazada("PROY-022")
+        resultado = ejecutar_discovery("PROY-022", _ClienteFalso(""))
+
+        gaps = RepositorioGaps().listar("PROY-022")
+        gaps_sintesis = [g for g in gaps if g.campo_o_concepto == "sintesis.flujo_rechazado"]
+        assert len(gaps_sintesis) == 1
+        assert gaps_sintesis[0].estado == EstadoGap.ABIERTO
+
+        # A1: nunca se inventa una pregunta para reactivar este Gap.
+        from src.discovery.catalogo_dominios import resolver_pregunta
+        assert resolver_pregunta("sintesis", "flujo_rechazado") is None
+
+        assert resultado.estado == EstadoDiscovery.REQUIERE_ACLARACION
+
+    def test_no_aparece_como_reapertura_ofrecida_en_la_ui(self, db):
+        """`_reapertura_pendiente()` de `app.py` solo devuelve un Gap con
+        `pregunta_id` resoluble — este Gap, al no tenerlo, nunca se ofrece
+        como pregunta reactivada (no se inventa a qué dominio pertenece)."""
+        import app as app_module
+
+        _completar_formulario_sintesis_rechazada("PROY-023")
+        ejecutar_discovery("PROY-023", _ClienteFalso(""))
+        assert app_module._reapertura_pendiente("PROY-023") is None
+
+    def test_confirmar_si_no_genera_ningun_gap_de_sintesis(self, db):
+        _completar_formulario_sin_contradiccion("PROY-024")
+        ejecutar_discovery("PROY-024", _ClienteFalso(""))
+        gaps = RepositorioGaps().listar("PROY-024")
+        assert all(g.campo_o_concepto != "sintesis.flujo_rechazado" for g in gaps)
 
 
 class TestHallazgoLLMSePersisteComoGap:

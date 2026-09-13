@@ -35,12 +35,15 @@ class TestConstruirContexto:
         assert r[0].pregunta_texto in contexto
         assert ids == {r[0].id}
 
-    def test_administrador_tipo_acciones_llega_deserializado_y_legible(self):
-        r = _responder([], "administrador_tipo_acciones", ["Ver información", "Agregar cosas nuevas"])
+    def test_ninguna_cerrada_llega_al_contexto_ni_siquiera_multiple(self):
+        """TF-0033 simplifica el criterio: ya no existe ninguna cerrada
+        "sin significado autocontenido" que deba colarse (el único caso de
+        TF-0030, `administrador_tipo_acciones`, se retiró) — toda
+        `OPCION_CERRADA` queda fuera, sin excepción."""
+        r = _responder([], "experiencia_persona_permisos_residual", ["Ver información", "Agregar cosas nuevas"])
         contexto, ids = construir_contexto(r)
-        assert "Ver información" in contexto
-        assert "Agregar cosas nuevas" in contexto
-        assert ids == {r[0].id}
+        assert contexto == ""
+        assert ids == set()
 
     def test_nombre_proyecto_excluido_del_contexto(self):
         r = _responder([], "nombre_proyecto", "Cafecito")
@@ -51,14 +54,14 @@ class TestConstruirContexto:
     def test_deterministas_excluidas_del_contexto(self):
         r = _responder([], "plataforma", "Desde un navegador web")
         r = _responder(r, "monetizacion", "Sí, de alguna forma")
-        r = _responder(r, "monetizacion_forma", "Una sola vez")
+        r = _responder(r, "monetizacion_forma", "Pago único")
         contexto, ids = construir_contexto(r)
         assert contexto == ""
         assert ids == set()
 
     def test_controles_de_flujo_y_compuertas_excluidos_del_contexto(self):
         r = _responder([], "perfil_usuario_continuar", "No")
-        r = _responder(r, "nuevo_o_existente", "Es un proyecto nuevo")
+        r = _responder(r, "nuevo_o_existente", "Nuevo")
         r = _responder(r, "dato_recordar", "No")
         contexto, ids = construir_contexto(r)
         assert contexto == ""
@@ -79,12 +82,12 @@ class TestConstruirContexto:
         """TF-0032 (A1): Qwen ve nombres de dominio + etiquetas del dominio
         activo, nunca el catálogo de preguntas."""
         r = _responder([], "problema_objetivo", "Algo")
-        r = _responder(r, "dato_recordar_detalle", "El historial de pedidos")
+        r = _responder(r, "dato_sensible", "No")
         contexto, _ = construir_contexto(r)
         assert "Dominios y etiquetas activos" in contexto
         assert "identidad" in contexto
         assert "datos" in contexto
-        assert "sensibilidad" in contexto  # etiqueta real de dato_recordar_detalle
+        assert "sensibilidad" in contexto  # etiqueta real de dato_sensible
 
     def test_sin_texto_libre_no_incluye_seccion_de_dominios(self):
         """El corto-circuito de contexto vacío ocurre ANTES de mirar
